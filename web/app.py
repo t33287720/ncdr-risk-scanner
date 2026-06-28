@@ -190,9 +190,9 @@ def upload_kml():
     if 'file' not in request.files:
         return jsonify({'error': '沒有上傳檔案'}), 400
     f = request.files['file']
-    if not f.filename.lower().endswith('.kml'):
-        return jsonify({'error': '只接受 .kml 檔案'}), 400
     name = secure_filename(f.filename)
+    if not name.lower().endswith('.kml'):
+        return jsonify({'error': '只接受 .kml 檔案'}), 400
     path = os.path.join(KML_DIR, name)
     f.save(path)
     # 檢查地點數量
@@ -375,7 +375,8 @@ def ai_analyze(job_id):
     except _requests.exceptions.ConnectionError:
         return jsonify({'error': f'無法連接 Ollama（{OLLAMA_URL}）'}), 503
     except Exception as e:
-        return jsonify({'error': f'AI 分析失敗：{e}'}), 500
+        app.logger.error(f'AI 分析失敗：{e}')
+        return jsonify({'error': 'AI 分析失敗，請稍後再試'}), 500
 
 
 if __name__ == '__main__':

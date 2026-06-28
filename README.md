@@ -36,13 +36,14 @@ NCDR 官網提供台灣各地的氣候變遷災害風險資料，但只能手動
 
 ## 功能
 
-- **批次分析**：上傳 `.kml` 後一鍵查詢所有地點
+- **批次分析**：上傳 `.kml` 後一鍵查詢所有地點（上限 200 個）
 - **手動標記**：在地圖上點擊新增地點並命名，儲存為 KML 後分析
 - **快速查詢**：點擊地圖任意位置，直接查詢該點的所有風險指標
 - **地址搜尋**：地圖查詢頁支援中文地址搜尋（Photon / Nominatim）
 - **儀表板地圖**：所有分析過的地點在儀表板上一覽無遺
 - **CSV 報表**：可下載完整分析結果
 - **氣候情境選擇**：支援 1.5°C / 2°C / 4°C 三種全球暖化情境
+- **AI 深度解析**：整合本地 Ollama，分析完成後可呼叫 LLM 產生風險顧問報告
 
 ---
 
@@ -69,10 +70,11 @@ NCDR 官網提供台灣各地的氣候變遷災害風險資料，但只能手動
 ```
 ncdr-risk-scanner/
 ├── docker-compose.yml
+├── .env                  ← 本地設定（不進 git）：Ollama URL / model
 ├── README.md
 ├── worker/               ← 背景工作容器（Python + requests）
 │   ├── main.py           ← 監聽工作佇列，呼叫 NCDR WMS API
-│   ├── test.kml          ← 預設測試 KML（含 3 個地點）
+│   ├── test.kml          ← 預設測試 KML（含 3 個地點，容器啟動時自動複製）
 │   ├── requirements.txt
 │   └── Dockerfile
 └── web/                  ← 網頁容器（Flask + Leaflet + Jinja2）
@@ -85,7 +87,8 @@ ncdr-risk-scanner/
         ├── base.html        ← 共用版型與 nav
         ├── index.html       ← 儀表板（KML 管理、分析記錄、地圖總覽）
         ├── map_query.html   ← 地圖查詢（手動標記 / 快速查詢）
-        └── results.html     ← 分析結果（風險表格 + 互動地圖）
+        ├── results.html     ← 分析結果（風險表格 + 互動地圖 + AI 解析）
+        └── about.html       ← 系統說明頁
 ```
 
 ---
@@ -135,11 +138,29 @@ location ^~ /ncdr/ {
 
 ### 更新程式碼
 
-由於使用 volume 掛載原始碼，修改 `web/` 下的檔案會立即生效（Flask debug 模式）。修改 `worker/` 下的檔案後執行：
+由於使用 volume 掛載原始碼，修改 `web/` 下的檔案（templates、CSS）會立即生效。修改 `web/app.py` 或 `worker/main.py` 後執行：
 
 ```bash
-docker compose restart worker
+docker compose restart web      # 修改 web/app.py 後
+docker compose restart worker   # 修改 worker/main.py 後
 ```
+
+### AI 深度解析（選用）
+
+需要本地已安裝 [Ollama](https://ollama.com/)，並拉取模型：
+
+```bash
+ollama pull qwen2.5:7b   # 推薦，中文推理能力佳
+```
+
+然後在 `.env` 設定：
+
+```
+OLLAMA_URL=http://ollama:11434   # 若 Ollama 也在 Docker 內
+OLLAMA_MODEL=qwen2.5:7b
+```
+
+重啟後分析結果頁面會出現「AI 深度解析」按鈕。
 
 ---
 

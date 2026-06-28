@@ -18,6 +18,8 @@ services:
     environment:
       - DATA_DIR=/data
       - SCRIPT_NAME=/ncdr
+      - OLLAMA_URL
+      - OLLAMA_MODEL
     volumes:
       - /var/opt/ncdr-risk-scanner:/data
       - ./web:/app

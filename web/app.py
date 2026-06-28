@@ -4,7 +4,11 @@ import uuid
 import glob
 import time
 import csv as csv_mod
+import requests as _requests
 from datetime import datetime, timezone, timedelta
+
+OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://host.docker.internal:11434')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
 
 TW_TZ = timezone(timedelta(hours=8))
 def now_tw():
@@ -290,6 +294,52 @@ def save_point_kml():
         f.write(_points_to_kml([{'name': label, 'lat': lat, 'lon': lon}]))
 
     return jsonify({'ok': True, 'name': filename})
+
+
+@app.route('/api/ai-analyze/<job_id>', methods=['POST'])
+def ai_analyze(job_id):
+    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
+    if not os.path.exists(job_file):
+        return jsonify({'error': '找不到工作'}), 404
+    with open(job_file, encoding='utf-8') as f:
+        job = json.load(f)
+    if job.get('status') != 'done' or not job.get('results'):
+        return jsonify({'error': '分析尚未完成'}), 400
+
+    scenario_labels = {'1.5C': '1.5°C', '2C': '2°C', '4C': '4°C'}
+    scenario = scenario_labels.get(job.get('scenario', '2C'), '2°C')
+    results  = job['results']
+
+    lines = [f"地點名稱 | 淹水風險 | 淹水危害度 | 淹水脆弱度 | 淹水暴露度 | 坡地危害度"]
+    lines += [f"{r['name']} | {r['flood_risk']} | {r['flood_hazard']} | {r['flood_vuln']} | {r['flood_exposure']} | {r['land_hazard']}"
+              for r in results]
+    table = "\n".join(lines)
+
+    prompt = f"""你是一位台灣氣候風險顧問。以下是 NCDR（國家災害防救科技中心）在「{scenario} 全球暖化情境」下，針對 {len(results)} 個地點的災害風險分析結果（風險等級分為第一至第五級，第五級最高）：
+
+{table}
+
+請用繁體中文提供：
+1. 整體風險摘要（2-3 句）
+2. 高風險地點（第四、五級）的具體建議
+3. 坡地與淹水風險的差異分析
+4. 若為選址評估，給出優先順序建議
+
+回答請簡潔、實用，避免重複資料表中的數字。"""
+
+    try:
+        resp = _requests.post(
+            f'{OLLAMA_URL}/api/generate',
+            json={'model': OLLAMA_MODEL, 'prompt': prompt, 'stream': False},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        analysis = resp.json().get('response', '').strip()
+        return jsonify({'ok': True, 'analysis': analysis})
+    except _requests.exceptions.ConnectionError:
+        return jsonify({'error': f'無法連接 Ollama（{OLLAMA_URL}）'}), 503
+    except Exception as e:
+        return jsonify({'error': f'AI 分析失敗：{e}'}), 500
 
 
 if __name__ == '__main__':

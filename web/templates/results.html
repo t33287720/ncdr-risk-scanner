@@ -22,9 +22,6 @@
       {{ {'pending':'等待中','running':'分析中','done':'完成','error':'錯誤'}.get(job.status, job.status) }}
     </span>
     <div style="margin-left:auto; display:flex; gap:8px;">
-      {% if job.status == 'done' %}
-      <button class="btn btn-secondary" id="aiBtn" onclick="runAiAnalysis()">AI 深度解析</button>
-      {% endif %}
       <a class="btn btn-primary" href="{{ url_for('results_csv', job_id=job.id) }}">↓ 下載 CSV</a>
     </div>
   </div>
@@ -108,9 +105,24 @@
     </div>
     {% endif %}
 
-    <div id="aiResult" style="display:none;" class="card">
-      <span class="card-title">AI 深度解析（llama3.1:8b）</span>
-      <div id="aiContent" style="font-size:.9rem; line-height:1.8; white-space:pre-wrap;"></div>
+    <div id="aiPanel" class="card">
+      <span class="card-title">AI 深度解析</span>
+      <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap;">
+        <div style="flex:1; min-width:200px;">
+          <label style="font-size:.8rem; color:var(--muted); display:block; margin-bottom:4px;">分析目的</label>
+          <select id="aiPurpose" style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:5px; font-size:.875rem;">
+            <option value="選址評估">選址評估（從多個地點中選擇最佳方案）</option>
+            <option value="不動產風險評估">不動產風險評估（買賣或租賃前的風險確認）</option>
+            <option value="供應鏈風險盤點">供應鏈風險盤點（供應商或倉儲地點評估）</option>
+            <option value="公共設施評估">公共設施評估（學校、醫院、避難所等）</option>
+            <option value="企業營運持續">企業營運持續規劃（BCP / 災害應變）</option>
+          </select>
+        </div>
+        <div style="padding-top:22px;">
+          <button class="btn btn-secondary" id="aiBtn" onclick="runAiAnalysis()">開始解析</button>
+        </div>
+      </div>
+      <div id="aiContent" style="display:none; margin-top:16px; font-size:.9rem; line-height:1.8; white-space:pre-wrap; border-top:1px solid var(--border); padding-top:16px;"></div>
     </div>
 
     <div class="card" style="padding:0; overflow:hidden;">
@@ -158,28 +170,26 @@ setTimeout(checkStatus, 4000);
 {% if job.status == 'done' %}
 <script>
 async function runAiAnalysis() {
-  const btn = document.getElementById('aiBtn');
-  const resultBox = document.getElementById('aiResult');
-  const content   = document.getElementById('aiContent');
+  const btn     = document.getElementById('aiBtn');
+  const content = document.getElementById('aiContent');
+  const purpose = document.getElementById('aiPurpose').value;
   btn.disabled = true;
-  btn.textContent = '分析中...';
-  resultBox.style.display = 'block';
-  content.textContent = '正在呼叫 AI，依模型大小需等待數十秒...';
+  btn.textContent = '解析中...';
+  content.style.display = 'block';
+  content.textContent = '正在分析，依模型大小需等待數十秒...';
   try {
-    const res = await fetch(BASE + '/api/ai-analyze/{{ job.id }}', { method: 'POST' });
+    const res  = await fetch(BASE + '/api/ai-analyze/{{ job.id }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ purpose }),
+    });
     const data = await res.json();
-    if (data.ok) {
-      content.textContent = data.analysis;
-      btn.textContent = '重新解析';
-    } else {
-      content.textContent = '錯誤：' + (data.error || '未知錯誤');
-      btn.textContent = 'AI 深度解析';
-    }
+    content.textContent = data.ok ? data.analysis : ('錯誤：' + escHtml(data.error || '未知錯誤'));
   } catch (e) {
     content.textContent = '連線失敗，請確認 Ollama 正在執行。';
-    btn.textContent = 'AI 深度解析';
   }
   btn.disabled = false;
+  btn.textContent = '重新解析';
 }
 </script>
 {% endif %}

@@ -310,27 +310,60 @@ def ai_analyze(job_id):
     scenario = scenario_labels.get(job.get('scenario', '2C'), '2°C')
     results  = job['results']
 
-    lines = [f"地點名稱 | 淹水風險 | 淹水危害度 | 淹水脆弱度 | 淹水暴露度 | 坡地危害度"]
-    lines += [f"{r['name']} | {r['flood_risk']} | {r['flood_hazard']} | {r['flood_vuln']} | {r['flood_exposure']} | {r['land_hazard']}"
-              for r in results]
-    table = "\n".join(lines)
+    purpose = (request.json or {}).get('purpose', '選址評估')
 
-    prompt = f"""你是一位台灣氣候風險顧問。以下是 NCDR（國家災害防救科技中心）在「{scenario} 全球暖化情境」下，針對 {len(results)} 個地點的災害風險分析結果（風險等級分為第一至第五級，第五級最高）：
+    LEVEL_DESC = {
+        '第一級': '低風險',
+        '第二級': '中低風險',
+        '第三級': '中風險',
+        '第四級': '中高風險',
+        '第五級': '高風險',
+        '無':     '無資料',
+        '錯誤':   '查詢失敗',
+    }
+    lines = ['地點名稱 | 淹水風險(整合) | 淹水危害度(強度) | 淹水脆弱度(承受力) | 淹水危害脆弱度 | 淹水暴露度(人口) | 坡地危害度 | 坡地危害脆弱度']
+    for r in results:
+        row = ' | '.join([
+            r.get('name', '—'),
+            r.get('flood_risk', '—'),
+            r.get('flood_hazard', '—'),
+            r.get('flood_vuln', '—'),
+            r.get('flood_hazard_vuln', '—'),
+            r.get('flood_exposure', '—'),
+            r.get('land_hazard', '—'),
+            r.get('land_hazard_vuln', '—'),
+        ])
+        lines.append(row)
+    table = '\n'.join(lines)
+
+    prompt = f"""以下是 {len(results)} 個地點在 NCDR「{scenario}暖化情境」下的災害風險資料（第一至五級，五級最高）：
 
 {table}
 
-請用繁體中文提供：
-1. 整體風險摘要（2-3 句）
-2. 高風險地點（第四、五級）的具體建議
-3. 坡地與淹水風險的差異分析
-4. 若為選址評估，給出優先順序建議
+指標說明：
+- 淹水危害度：積水深度與範圍（越高越危險）
+- 淹水脆弱度：當地居民承受災害的能力（越高越脆弱，越低代表有能力自我保護）
+- 淹水暴露度：受影響的人口密度
+- 淹水風險：三者的整合評分
+- 坡地危害度：土石流或山崩風險
 
-回答請簡潔、實用，避免重複資料表中的數字。"""
+使用目的：{purpose}
+
+請用繁體中文，針對上述目的，完成以下任務：
+1. 比較這些地點的差異，指出哪些地點相對適合、哪些需要避免，說明理由（直接用地點名稱，不要只說「某地點」）。
+2. 對最高風險的地點，說明在「{purpose}」情境下具體會發生什麼問題，以及可以採取的對策。
+3. 列出 2-3 個做最終決策前需要進一步調查的問題。"""
 
     try:
         resp = _requests.post(
             f'{OLLAMA_URL}/api/generate',
-            json={'model': OLLAMA_MODEL, 'prompt': prompt, 'stream': False},
+            json={
+                'model': OLLAMA_MODEL,
+                'system': '你是一位專業的台灣氣候風險顧問，擅長解讀 NCDR 的災害風險指標並給出具體可行的建議。回答必須精準、有根據、直指問題核心，不說廢話。',
+                'prompt': prompt,
+                'stream': False,
+                'options': {'temperature': 0.3, 'top_p': 0.9},
+            },
             timeout=120,
         )
         resp.raise_for_status()

@@ -15,6 +15,31 @@
   </div>
 
   <div class="card">
+    <span class="card-title">為什麼需要這個系統</span>
+    <p style="color:var(--muted); font-size:.875rem; margin-bottom:16px; line-height:1.7;">
+      當你需要一次評估多個地點的氣候風險時，NCDR 官網只能手動逐一查詢，效率極低。
+      以下是本系統的典型使用情境：
+    </p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      {% for icon, title, desc in [
+        ('🏭', '企業選址', '評估幾十個候選廠址或門市，了解各地點的淹水與坡地風險，作為選址依據。'),
+        ('🏠', '不動產盡職調查', '在買賣或租賃前確認標的物在氣候變遷情境下的長期風險。'),
+        ('🚚', '供應鏈韌性評估', '確認供應商、倉儲或物流節點在不同暖化情境下的災害暴露程度。'),
+        ('🏫', '設施風險盤點', '批次分析學校、醫院、避難所等公共設施的氣候風險分布。'),
+      ] %}
+      <div style="background:var(--bg); border-radius:var(--radius); padding:16px;">
+        <div style="font-size:1.5rem; margin-bottom:8px;">{{ icon }}</div>
+        <div style="font-weight:600; margin-bottom:6px;">{{ title }}</div>
+        <div style="color:var(--muted); font-size:.85rem; line-height:1.6;">{{ desc }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <p style="color:var(--muted); font-size:.8rem; margin-top:16px; padding:12px; background:var(--bg); border-radius:var(--radius);">
+      手動在 NCDR 官網逐一查詢 50 個地點需要數小時。本系統只需上傳一個 KML 檔案，幾分鐘內自動完成並輸出報表。
+    </p>
+  </div>
+
+  <div class="card">
     <span class="card-title">相較於 NCDR 官網的優勢</span>
     <table>
       <thead><tr><th>項目</th><th>NCDR 官網</th><th>本系統</th></tr></thead>

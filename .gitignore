@@ -1,5 +1,22 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# 本地設定
 .env
 .claude/
+
+# 編輯器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系統
+.DS_Store
+Thumbs.db
+
+# Log
+*.log

@@ -62,6 +62,12 @@
 
     {% if rows %}
     <div class="card" style="overflow-x:auto;">
+    {% elif job.status == 'done' %}
+    <div class="card" style="text-align:center; padding:32px; color:var(--muted);">
+      沒有可顯示的風險資料
+    </div>
+    {% endif %}
+    {% if rows %}
       <span class="card-title">詳細風險資料（{{ scenario_label }} 情境）</span>
       <table class="risk-table">
         <thead>

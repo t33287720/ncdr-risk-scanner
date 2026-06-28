@@ -177,10 +177,14 @@ async function deleteKml(name, btn) {
 }
 
 // 輪詢工作狀態
+const _polling = new Set();
 async function pollJob(jobId) {
+  if (_polling.has(jobId)) return;  // 防重疊
+  _polling.add(jobId);
   const btn = document.getElementById(`poll-${jobId}`);
   if (btn) btn.textContent = '查詢中...';
   const data = await fetch(`${BASE}/api/status/${jobId}`).then(r => r.json());
+  _polling.delete(jobId);
   const row  = document.getElementById(`row-${jobId}`);
   if (!row) return;
 

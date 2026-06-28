@@ -185,17 +185,22 @@ function clearPoints() {
 
 async function savePoints(andAnalyze) {
   if (!points.length) return toast('請先新增地點', 'error');
+  const btns = document.querySelectorAll('#tab-manual button');
+  btns.forEach(b => b.disabled = true);
   let filename = document.getElementById('manualFilename').value.trim() || 'manual_points.kml';
   if (!filename.endsWith('.kml')) filename += '.kml';
 
-  const res = await api('/api/save-points', { points, filename });
-  if (!res.ok) return toast(res.error, 'error');
-  toast(`已儲存 ${res.name}`, 'success');
-
-  if (andAnalyze) {
-    const job = await api('/api/analyze', { kml_name: res.name });
-    if (job.ok) { toast('已提交分析，跳轉至儀表板', 'success'); setTimeout(() => location.href = BASE + '/', 1000); }
-    else toast(job.error, 'error');
+  try {
+    const res = await api('/api/save-points', { points, filename });
+    if (!res.ok) { toast(res.error, 'error'); return; }
+    toast(`已儲存 ${res.name}`, 'success');
+    if (andAnalyze) {
+      const job = await api('/api/analyze', { kml_name: res.name });
+      if (job.ok) { toast('已提交分析，跳轉至儀表板', 'success'); setTimeout(() => location.href = BASE + '/', 1000); }
+      else toast(job.error, 'error');
+    }
+  } finally {
+    btns.forEach(b => b.disabled = false);
   }
 }
 
@@ -265,9 +270,11 @@ land_hazard:       '坡地危害度',
       const rows = Object.entries(LABELS).map(([k, lbl]) =>
         `<tr><td style="color:var(--muted);padding:3px 0;font-size:.82rem">${lbl}</td><td style="padding:3px 0 3px 12px">${riskBadge(r[k])}</td></tr>`
       ).join('');
+      const scenarioLabel = {'1.5C':'1.5°C','2C':'2°C','4C':'4°C'}[scenario] || scenario;
       resultEl.innerHTML = `
         <div class="result-box done">
           <strong style="font-size:.95rem">${escHtml(label)}</strong>
+          <span style="font-size:.75rem;color:var(--muted);margin-left:8px">情境：${escHtml(scenarioLabel)}</span>
           <table style="margin-top:8px;width:100%;border-collapse:collapse">${rows}</table>
           <button class="btn btn-secondary" style="margin-top:10px;width:100%;font-size:.8rem"
             onclick="savePointKml(${queryLatLng.lat},${queryLatLng.lng},${JSON.stringify(label)})">

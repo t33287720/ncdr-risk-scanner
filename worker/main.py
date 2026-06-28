@@ -70,13 +70,21 @@ def get_token():
     global _token, _token_expires
     if _token and time.time() < _token_expires:
         return _token
-    print("取得 NCDR token...")
-    r = _session.get(TOKEN_URL, timeout=10)
-    r.raise_for_status()
-    _token = r.text.strip()
-    _token_expires = time.time() + TOKEN_TTL
-    print(f"token 取得成功（有效至 {datetime.fromtimestamp(_token_expires).strftime('%H:%M:%S')}）")
-    return _token
+    for attempt in range(3):
+        try:
+            print("取得 NCDR token...")
+            r = _session.get(TOKEN_URL, timeout=10)
+            r.raise_for_status()
+            _token = r.text.strip()
+            _token_expires = time.time() + TOKEN_TTL
+            print(f"token 取得成功（有效至 {datetime.fromtimestamp(_token_expires).strftime('%H:%M:%S')}）")
+            return _token
+        except Exception as e:
+            if attempt < 2:
+                print(f"token 取得失敗（第 {attempt+1} 次）：{e}，重試中...")
+                time.sleep(2 ** attempt)
+            else:
+                raise RuntimeError(f"無法取得 NCDR token：{e}") from e
 
 
 # ── 座標轉換 ─────────────────────────────────────────────
@@ -247,7 +255,7 @@ def process_job(job_file):
     _write_job(job_file, job)
 
     try:
-        entries = parse_kml(kml_path)
+        entries = parse_kml(kml_path)  # 在 try 內，失敗會正確設為 error
         print(f"[{job_id}] {len(entries)} 個地點")
 
         results = []
@@ -272,10 +280,11 @@ def process_job(job_file):
         job['count']    = len(results)
         job['summary']  = {lvl: sum(1 for r in results if r.get('flood_risk') == lvl)
                            for lvl in ['第五級', '第四級', '第三級', '第二級', '第一級', '無', '錯誤']}
-        job['results']  = [{k: r.get(k, '無') for k in
+        job['results']  = [{**{k: r.get(k, '無') for k in
                             ['name', 'lat', 'lon', 'flood_risk', 'flood_hazard',
                              'flood_vuln', 'flood_hazard_vuln', 'flood_exposure',
-                             'land_hazard', 'land_hazard_vuln']}
+                             'land_hazard', 'land_hazard_vuln']},
+                            'scenario': job.get('scenario', DEFAULT_SCENARIO)}
                            for r in results]
 
     except Exception as e:

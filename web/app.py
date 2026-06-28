@@ -177,6 +177,8 @@ def results_csv(job_id):
 
 # ── API ───────────────────────────────────────────────────
 
+KML_MAX_POINTS = 200
+
 @app.route('/api/upload', methods=['POST'])
 def upload_kml():
     if 'file' not in request.files:
@@ -185,7 +187,17 @@ def upload_kml():
     if not f.filename.lower().endswith('.kml'):
         return jsonify({'error': '只接受 .kml 檔案'}), 400
     name = secure_filename(f.filename)
-    f.save(os.path.join(KML_DIR, name))
+    path = os.path.join(KML_DIR, name)
+    f.save(path)
+    # 檢查地點數量
+    import xml.etree.ElementTree as ET
+    try:
+        count = len(ET.parse(path).findall('.//{http://www.opengis.net/kml/2.2}Point'))
+        if count > KML_MAX_POINTS:
+            os.remove(path)
+            return jsonify({'error': f'KML 包含 {count} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
+    except Exception:
+        pass  # 解析失敗讓 worker 處理
     return jsonify({'ok': True, 'name': name})
 
 

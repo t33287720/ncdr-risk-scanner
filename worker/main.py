@@ -22,6 +22,9 @@ import requests
 from bs4 import BeautifulSoup
 import folium
 
+_session = requests.Session()
+_session.headers.update({'User-Agent': 'ncdr-risk-scanner'})
+
 DATA_DIR    = os.environ.get('DATA_DIR', '/data')
 JOBS_DIR    = os.path.join(DATA_DIR, 'jobs')
 RESULTS_DIR = os.path.join(DATA_DIR, 'results')
@@ -67,7 +70,7 @@ def get_token():
     if _token and time.time() < _token_expires:
         return _token
     print("取得 NCDR token...")
-    r = requests.get(TOKEN_URL, timeout=10)
+    r = _session.get(TOKEN_URL, timeout=10)
     r.raise_for_status()
     _token = r.text.strip()
     _token_expires = time.time() + TOKEN_TTL
@@ -90,13 +93,6 @@ def _wms_query(url, lat, lon, layer):
     token = get_token()
     cx, cy = to_3857(lat, lon)
     d = 200
-
-    # 取樣點：預設只查中心，40m 格點用多點取樣避免落在格點縫隙
-    sample_points = [(50, 50)]
-    if multi_sample:
-        sample_points = [(50,50),(45,50),(55,50),(50,45),(50,55),
-                         (45,45),(55,55),(45,55),(55,45)]
-
     params = {
         'REQUEST': 'GetFeatureInfo', 'SERVICE': 'WMS', 'VERSION': '1.3.0',
         'LAYERS': layer, 'QUERY_LAYERS': layer, 'STYLES': '',
@@ -105,15 +101,23 @@ def _wms_query(url, lat, lon, layer):
         'WIDTH': '101', 'HEIGHT': '101', 'I': '50', 'J': '50',
         'INFO_FORMAT': 'text/html', 'TOKEN': token,
     }
-    r = requests.get(url, params=params, timeout=20)
-    r.encoding = 'utf-8'
-    soup = BeautifulSoup(r.text, 'html.parser')
-    rows = soup.find_all('tr')
-    if len(rows) < 2:
-        return {}
-    headers = [td.get_text(strip=True) for td in rows[0].find_all(['th', 'td'])]
-    values  = [td.get_text(strip=True) for td in rows[1].find_all(['th', 'td'])]
-    return dict(zip(headers, values))
+    for attempt in range(3):
+        try:
+            r = _session.get(url, params=params, timeout=20)
+            r.encoding = 'utf-8'
+            rows = BeautifulSoup(r.text, 'html.parser').find_all('tr')
+            if len(rows) >= 2:
+                headers = [td.get_text(strip=True) for td in rows[0].find_all(['th', 'td'])]
+                values  = [td.get_text(strip=True) for td in rows[1].find_all(['th', 'td'])]
+                return dict(zip(headers, values))
+            return {}
+        except Exception as e:
+            if attempt < 2:
+                wait = 2 ** attempt
+                print(f"    WMS 查詢失敗（第 {attempt+1} 次），{wait}s 後重試：{e}")
+                time.sleep(wait)
+            else:
+                raise
 
 
 def _parse_level(val):
@@ -276,7 +280,27 @@ def process_job(job_file):
     print(f"[{job_id}] 完成")
 
 
+def _cleanup_old_jobs(keep=100):
+    """保留最新 keep 筆，其餘連同 results 一併刪除。"""
+    import shutil
+    all_jobs = sorted(glob.glob(os.path.join(JOBS_DIR, '*.json')))
+    to_delete = all_jobs[:-keep] if len(all_jobs) > keep else []
+    for job_file in to_delete:
+        try:
+            with open(job_file, encoding='utf-8') as f:
+                job_id = json.load(f).get('id', '')
+            os.remove(job_file)
+            result_dir = os.path.join(RESULTS_DIR, job_id)
+            if job_id and os.path.isdir(result_dir):
+                shutil.rmtree(result_dir)
+        except Exception as e:
+            print(f"清除舊工作失敗 {job_file}: {e}")
+    if to_delete:
+        print(f"已清除 {len(to_delete)} 筆舊記錄")
+
+
 print("Worker 啟動（API 模式），監聽工作佇列...")
+_cleanup_cycle = 0
 while True:
     for job_file in sorted(glob.glob(os.path.join(JOBS_DIR, '*.json'))):
         try:
@@ -286,4 +310,8 @@ while True:
                 process_job(job_file)
         except Exception as e:
             print(f"讀取工作失敗 {job_file}: {e}")
+    _cleanup_cycle += 1
+    if _cleanup_cycle >= 50:  # 每 ~100 秒清一次
+        _cleanup_old_jobs()
+        _cleanup_cycle = 0
     time.sleep(2)

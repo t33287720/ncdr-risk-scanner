@@ -131,12 +131,12 @@ if (document.getElementById('dashMap') && allPoints.length) {
       color, fillColor: color, fillOpacity: 0.8, weight: 2,
       dashArray: isPoint ? '4 2' : null,   // 快速查詢用虛線邊框
     }).bindPopup(`
-      <b>${p.name}</b>
+      <b>${escHtml(p.name)}</b>
       <span style="font-size:.75rem;color:#888;margin-left:6px">${isPoint ? '快速查詢' : '批次分析'}</span><br>
-      淹水風險：${p.flood_risk}<br>
-      情境：${p.scenario}<br>
-      來源：${p.kml}<br>
-      <a href="${BASE}/results/${p.job_id}" style="font-size:.8rem">查看完整結果 →</a>
+      淹水風險：${escHtml(p.flood_risk)}<br>
+      情境：${escHtml(p.scenario)}<br>
+      來源：${escHtml(p.kml)}<br>
+      <a href="${BASE}/results/${escHtml(p.job_id)}" style="font-size:.8rem">查看完整結果 →</a>
     `);
   });
 
@@ -193,7 +193,7 @@ async function pollJob(jobId) {
     row.cells[4].textContent = data.count ?? '—';
     row.cells[5].innerHTML = `<a class="btn btn-secondary btn-sm" href="${BASE}/results/${jobId}">查看結果</a>`;
   } else if (data.status === 'error') {
-    row.cells[5].innerHTML = `<span style="color:var(--danger);font-size:.8rem">${data.error || ''}</span>`;
+    row.cells[5].innerHTML = `<span style="color:var(--danger);font-size:.8rem">${escHtml(data.error || '')}</span>`;
   } else {
     if (btn) btn.textContent = '重新整理';
     setTimeout(() => pollJob(jobId), 4000);

@@ -20,6 +20,9 @@
 <div class="toast-container" id="toasts"></div>
 <script>
 const BASE = "{{ request.script_root }}";
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function toast(msg, type='') {
   const el = document.createElement('div');
   el.className = 'toast ' + type;

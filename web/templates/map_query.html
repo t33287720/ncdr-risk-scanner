@@ -167,12 +167,14 @@ function renderPointList() {
 function removePoint(idx) {
   points.splice(idx, 1);
   manualLayer.clearLayers();
-  const copy = [...points];
-  points.length = 0;
-  copy.forEach(p => {
+  points.forEach((p, i) => {
     const marker = L.marker([p.lat, p.lon]).addTo(manualLayer);
-    points.push(p);
-    marker.bindPopup(`<input value="${escHtml(p.name)}" style="width:120px">`);
+    marker.bindPopup(`
+      <div style="min-width:140px">
+        <input id="pname-${i}" value="${escHtml(p.name)}" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:.85rem">
+        <br><button onclick="renamePoint(${i})" style="margin-top:6px;font-size:.8rem;cursor:pointer">確認名稱</button>
+      </div>
+    `);
   });
   renderPointList();
 }
@@ -234,7 +236,7 @@ async function submitQuery() {
   const scenario = document.getElementById('queryScenario').value;
   const res = await api('/api/query-point', { lat: queryLatLng.lat, lon: queryLatLng.lng, label, scenario });
   if (!res.ok) {
-    resultEl.innerHTML = `<div class="result-box error">${res.error}</div>`;
+    resultEl.innerHTML = `<div class="result-box error">${escHtml(res.error || '查詢失敗')}</div>`;
     document.getElementById('queryBtn').disabled = false;
     return;
   }

@@ -1,0 +1,114 @@
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: .875rem;
+}
+
+.map-frame {
+  width: 100%;
+  height: 520px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* ── Risk level summary grid ─────────────────────────── */
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  text-align: center;
+  padding: 14px;
+  border-radius: var(--radius);
+}
+
+.summary-item .count {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.summary-item .label {
+  font-size: .8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.lv5 { background: #fde8e8; color: #9F0000; }
+.lv4 { background: #fdeede; color: #CA3B00; }
+.lv3 { background: #fef5e4; color: #CA7D1D; }
+.lv2 { background: #fefde4; color: #8a7500; }
+.lv1 { background: #f4f4f4; color: #555;    }
+.lv0 { background: #f0f4f8; color: var(--muted); }
+
+/* ── Risk detail table ───────────────────────────────── */
+
+.risk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+  min-width: 680px;
+}
+
+.risk-table th,
+.risk-table td {
+  padding: 8px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.risk-table thead th {
+  background: var(--bg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.risk-table thead tr:first-child th {
+  border-bottom: none;
+  padding-bottom: 4px;
+}
+
+.risk-table thead tr:last-child th {
+  padding-top: 4px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.risk-table tbody tr:hover { background: #f8f9fa; }
+
+.risk-table .name-cell {
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.group-flood { border-bottom: 2px solid #3b82f6; }
+.group-land  { border-bottom: 2px solid #10b981; }
+
+/* ── Risk badge ──────────────────────────────────────── */
+
+.risk-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.risk-badge.lv5 { background: #fde8e8; color: #9F0000; }
+.risk-badge.lv4 { background: #fdeede; color: #CA3B00; }
+.risk-badge.lv3 { background: #fef5e4; color: #CA7D1D; }
+.risk-badge.lv2 { background: #fefde4; color: #8a7500; }
+.risk-badge.lv1 { background: #f4f4f4; color: #555;    }
+.risk-badge.lv0 { background: #f0f4f8; color: var(--muted); }
+.risk-badge.lv-err { background: #fee2e2; color: #dc2626; }

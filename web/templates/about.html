@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}說明 — NCDR 風險分析{% endblock %}
+
+{% block body %}
+<div class="page" style="max-width:800px;">
+
+  <div class="card">
+    <span class="card-title">系統說明</span>
+    <h2 style="font-size:1.3rem; margin-bottom:8px;">NCDR 氣候變遷災害風險掃描系統</h2>
+    <p style="color:var(--muted); font-size:.9rem; line-height:1.7;">
+      本系統串接國家災害防救科技中心（NCDR）的氣候變遷災害風險圖臺 WMS API，
+      讓使用者可批次查詢多個地點的災害風險等級，無需逐一手動操作 NCDR 官網。
+      資料來源與官網完全一致，支援淹水與坡地兩類災害、三種氣候情境。
+    </p>
+  </div>
+
+  <div class="card">
+    <span class="card-title">相較於 NCDR 官網的優勢</span>
+    <table>
+      <thead><tr><th>項目</th><th>NCDR 官網</th><th>本系統</th></tr></thead>
+      <tbody>
+        <tr><td>查詢方式</td><td>手動一個點一個點查</td><td>上傳 KML 自動批次查詢</td></tr>
+        <tr><td>結果保存</td><td>無，需自行截圖記錄</td><td>自動存為 CSV 與互動地圖</td></tr>
+        <tr><td>同時顯示指標數</td><td>一次一種</td><td>7 個維度同時呈現</td></tr>
+        <tr><td>歷史記錄</td><td>無</td><td>儀表板顯示所有分析記錄</td></tr>
+        <tr><td>使用門檻</td><td>需熟悉 GIS 介面</td><td>上傳 KML 或地圖點擊即可</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <span class="card-title">使用方式</span>
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="min-width:32px; height:32px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">1</div>
+        <div>
+          <div style="font-weight:600; margin-bottom:4px;">準備 KML 檔案</div>
+          <div style="color:var(--muted); font-size:.875rem; line-height:1.6;">
+            從 Google Earth 匯出 <code>.kml</code> 檔案，或在本系統的「地圖查詢」頁面手動標記地點後儲存為 KML。
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="min-width:32px; height:32px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">2</div>
+        <div>
+          <div style="font-weight:600; margin-bottom:4px;">選擇氣候情境並上傳分析</div>
+          <div style="color:var(--muted); font-size:.875rem; line-height:1.6;">
+            在儀表板選擇氣候情境（1.5°C / 2°C / 4°C），上傳 KML 後點擊「分析」。
+            系統會自動呼叫 NCDR API 逐一查詢所有地點。
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="min-width:32px; height:32px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">3</div>
+        <div>
+          <div style="font-weight:600; margin-bottom:4px;">查看結果</div>
+          <div style="color:var(--muted); font-size:.875rem; line-height:1.6;">
+            分析完成後可查看風險表格、互動地圖，並下載 CSV 報表。
+            儀表板地圖總覽會顯示所有分析過的地點。
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="card-title">氣候情境說明</span>
+    <p style="color:var(--muted); font-size:.875rem; margin-bottom:16px; line-height:1.6;">
+      情境基於 IPCC AR6（聯合國第六次氣候變遷評估報告）的全球暖化程度（GWL），
+      代表全球平均溫度相較於工業化前（1850–1900 年）的升幅。
+    </p>
+    <table>
+      <thead><tr><th>情境</th><th>說明</th></tr></thead>
+      <tbody>
+        <tr><td><strong>1.5°C</strong></td><td>巴黎協定理想目標，需積極減碳才能達到</td></tr>
+        <tr><td><strong>2°C</strong>（預設）</td><td>巴黎協定上限，當前減碳力度若維持可能達到</td></tr>
+        <tr><td><strong>4°C</strong></td><td>高排放悲觀情境，約 2100 年前可能發生</td></tr>
+      </tbody>
+    </table>
+    <p style="color:var(--muted); font-size:.8rem; margin-top:12px;">
+      溫度越高代表極端降雨事件越強烈，淹水與坡地風險也相應提高。
+    </p>
+  </div>
+
+  <div class="card">
+    <span class="card-title">風險指標說明</span>
+    <table>
+      <thead><tr><th>指標</th><th>說明</th><th>改善方向</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>淹水風險</strong></td>
+          <td>綜合危害度、脆弱度、暴露度的整體風險等級</td>
+          <td>需同時處理三個面向</td>
+        </tr>
+        <tr>
+          <td><strong>淹水危害度</strong></td>
+          <td>氣候情境下極端降雨造成積水的深度與範圍</td>
+          <td>改善排水、建設滯洪設施</td>
+        </tr>
+        <tr>
+          <td><strong>淹水脆弱度</strong></td>
+          <td>該區人口對淹水的承受能力（高齡、低收入等）</td>
+          <td>預先疏散弱勢族群、加強社區韌性</td>
+        </tr>
+        <tr>
+          <td><strong>淹水危害脆弱度</strong></td>
+          <td>危害度與脆弱度的複合指標</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>淹水暴露度</strong></td>
+          <td>洪水範圍內的人口密度（受影響人數）</td>
+          <td>土地使用規劃、避免高風險區開發</td>
+        </tr>
+        <tr>
+          <td><strong>坡地危害度</strong></td>
+          <td>氣候情境下山崩、土石流等坡地災害危害程度</td>
+          <td>邊坡防護、土石流預警</td>
+        </tr>
+        <tr>
+          <td><strong>坡地危害脆弱度</strong></td>
+          <td>坡地危害與脆弱度的複合指標</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <span class="card-title">風險等級</span>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      {% for lv, bg, color in [
+        ('第五級','#fde8e8','#9F0000'),
+        ('第四級','#fdeede','#CA3B00'),
+        ('第三級','#fef5e4','#CA7D1D'),
+        ('第二級','#fefde4','#8a7500'),
+        ('第一級','#f4f4f4','#555'),
+      ] %}
+      <div style="background:{{ bg }};color:{{ color }};padding:12px 20px;border-radius:8px;font-weight:700;font-size:.95rem;">
+        {{ lv }}
+      </div>
+      {% endfor %}
+    </div>
+    <p style="color:var(--muted); font-size:.8rem; margin-top:12px;">
+      等級越高代表風險越大。資料空間尺度為鄉鎮市區，為行政區平均值，同一行政區內各地點實際風險可能有所差異。
+    </p>
+  </div>
+
+  <div class="card">
+    <span class="card-title">資料來源</span>
+    <ul style="color:var(--muted); font-size:.875rem; line-height:2; padding-left:20px;">
+      <li>風險資料：<a href="https://dra.ncdr.nat.gov.tw/" target="_blank">國家災害防救科技中心 NCDR</a>，氣候變遷災害風險圖臺（2025 版）</li>
+      <li>底圖：<a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a> contributors</li>
+      <li>地址搜尋：<a href="https://github.com/komoot/photon" target="_blank">Photon by Komoot</a>（開源，無需 API key）</li>
+      <li>互動地圖：<a href="https://leafletjs.com/" target="_blank">Leaflet.js</a></li>
+    </ul>
+  </div>
+
+</div>
+{% endblock %}

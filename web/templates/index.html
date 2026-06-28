@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}儀表板 — NCDR 風險分析{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <!-- 分析地圖總覽 -->
+  {% if map_jobs %}
+  <div class="card" style="padding:0; overflow:hidden;">
+    <div style="padding:16px 20px 12px; display:flex; justify-content:space-between; align-items:center;">
+      <span class="card-title" style="margin:0">分析地圖總覽</span>
+      <span style="font-size:.8rem; color:var(--muted)">點擊標記可查看風險資料</span>
+    </div>
+    <div id="dashMap" style="height:400px;"></div>
+  </div>
+  {% endif %}
+
+  <!-- KML 檔案管理 -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <span class="card-title" style="margin:0">KML 檔案</span>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label style="font-size:.85rem; color:var(--muted); margin:0">情境：</label>
+        <select id="scenarioSelect" class="btn btn-secondary btn-sm" style="padding:4px 8px; cursor:pointer;">
+          <option value="1.5C">1.5°C</option>
+          <option value="2C" selected>2°C（預設）</option>
+          <option value="4C">4°C</option>
+        </select>
+        <a class="btn btn-secondary btn-sm" href="{{ url_for('map_query') }}">+ 地圖新增</a>
+        <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+          ↑ 上傳 KML
+          <input type="file" accept=".kml" id="uploadInput" style="display:none" multiple>
+        </label>
+      </div>
+    </div>
+
+    {% if kmls %}
+    <table>
+      <thead><tr><th>檔案名稱</th><th>大小</th><th>修改時間</th><th></th></tr></thead>
+      <tbody>
+        {% for kml in kmls %}
+        <tr>
+          <td>{{ kml.name }}</td>
+          <td style="color:var(--muted)">{{ (kml.size / 1024) | round(1) }} KB</td>
+          <td style="color:var(--muted)">{{ kml.modified }}</td>
+          <td style="text-align:right; white-space:nowrap;">
+            <button class="btn btn-primary btn-sm" onclick="analyze('{{ kml.name }}')">分析</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteKml('{{ kml.name }}', this)" style="margin-left:6px;">刪除</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted); text-align:center; padding:24px 0;">
+      尚無 KML 檔案。請上傳或前往<a href="{{ url_for('map_query') }}">地圖查詢</a>頁面新增。
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- 分析記錄 -->
+  <div class="card">
+    <span class="card-title">分析記錄</span>
+    {% if jobs %}
+    <table>
+      <thead><tr><th>KML</th><th>建立時間</th><th>情境</th><th>狀態</th><th>地點數</th><th></th></tr></thead>
+      <tbody id="jobsBody">
+        {% for job in jobs %}
+        {% if job.get('type', 'batch') == 'batch' %}
+        <tr id="row-{{ job.id }}">
+          <td>{{ job.kml_name }}</td>
+          <td style="color:var(--muted)">{{ job.created }}</td>
+          <td style="color:var(--muted)">{{ {'1.5C':'1.5°C','2C':'2°C','4C':'4°C'}.get(job.get('scenario','2C'),'2°C') }}</td>
+          <td><span class="badge badge-{{ job.status }}">{{ {'pending':'等待中','running':'分析中','done':'完成','error':'錯誤'}.get(job.status, job.status) }}</span></td>
+          <td>{{ job.count if job.count is defined else '—' }}</td>
+          <td>
+            {% if job.status == 'done' %}
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('results', job_id=job.id) }}">查看結果</a>
+            {% elif job.status in ['pending', 'running'] %}
+            <button class="btn btn-secondary btn-sm" onclick="pollJob('{{ job.id }}')" id="poll-{{ job.id }}">重新整理</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted); text-align:center; padding:24px 0;">尚無分析記錄。</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── 儀表板地圖 ────────────────────────────────────────────
+const RISK_COLOR = {
+  '第五級':'#9F0000','第四級':'#CA3B00','第三級':'#CA7D1D',
+  '第二級':'#CAB453','第一級':'#CACABA','無':'#aaa','錯誤':'#555'
+};
+
+const allPoints = [
+  {% for job in map_jobs %}
+  {% for r in job.results %}
+  { lat:{{ r.lat }}, lon:{{ r.lon }}, name:{{ r.name | tojson }},
+    flood_risk:{{ r.flood_risk | tojson }}, kml:{{ job.kml_name | tojson }},
+    job_id:{{ job.id | tojson }}, scenario:{{ job.get('scenario','2C') | tojson }},
+    type:{{ job.get('type','batch') | tojson }} },
+  {% endfor %}
+  {% endfor %}
+];
+
+if (document.getElementById('dashMap') && allPoints.length) {
+  const dashMap = L.map('dashMap');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(dashMap);
+
+  const markers = allPoints.map(p => {
+    const color = RISK_COLOR[p.flood_risk] || '#aaa';
+    const isPoint = p.type === 'point';
+    return L.circleMarker([p.lat, p.lon], {
+      radius: isPoint ? 6 : 9,
+      color, fillColor: color, fillOpacity: 0.8, weight: 2,
+      dashArray: isPoint ? '4 2' : null,   // 快速查詢用虛線邊框
+    }).bindPopup(`
+      <b>${p.name}</b>
+      <span style="font-size:.75rem;color:#888;margin-left:6px">${isPoint ? '快速查詢' : '批次分析'}</span><br>
+      淹水風險：${p.flood_risk}<br>
+      情境：${p.scenario}<br>
+      來源：${p.kml}<br>
+      <a href="${BASE}/results/${p.job_id}" style="font-size:.8rem">查看完整結果 →</a>
+    `);
+  });
+
+  const group = L.featureGroup(markers).addTo(dashMap);
+  dashMap.fitBounds(group.getBounds().pad(0.1));
+}
+
+// ── 上傳 KML ─────────────────────────────────────────────
+document.getElementById('uploadInput').addEventListener('change', async function() {
+  for (const file of this.files) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(BASE + '/api/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) { toast(`已上傳 ${data.name}`, 'success'); }
+    else          { toast(data.error, 'error'); }
+  }
+  if (this.files.length) setTimeout(() => location.reload(), 800);
+});
+
+// 觸發分析
+async function analyze(kmlName) {
+  const scenario = document.getElementById('scenarioSelect').value;
+  const data = await api('/api/analyze', { kml_name: kmlName, scenario });
+  if (data.ok) {
+    toast(`已提交分析：${kmlName}`, 'success');
+    setTimeout(() => location.reload(), 600);
+  } else {
+    toast(data.error, 'error');
+  }
+}
+
+// 刪除 KML
+async function deleteKml(name, btn) {
+  if (!confirm(`確定刪除 ${name}？`)) return;
+  const data = await api('/api/delete-kml', { name });
+  if (data.ok) { btn.closest('tr').remove(); toast('已刪除', 'success'); }
+}
+
+// 輪詢工作狀態
+async function pollJob(jobId) {
+  const btn = document.getElementById(`poll-${jobId}`);
+  if (btn) btn.textContent = '查詢中...';
+  const data = await fetch(`${BASE}/api/status/${jobId}`).then(r => r.json());
+  const row  = document.getElementById(`row-${jobId}`);
+  if (!row) return;
+
+  const badge = row.querySelector('.badge');
+  const labelMap = { pending:'等待中', running:'分析中', done:'完成', error:'錯誤' };
+  badge.className = `badge badge-${data.status}`;
+  badge.textContent = labelMap[data.status] || data.status;
+
+  if (data.status === 'done') {
+    row.cells[4].textContent = data.count ?? '—';
+    row.cells[5].innerHTML = `<a class="btn btn-secondary btn-sm" href="${BASE}/results/${jobId}">查看結果</a>`;
+  } else if (data.status === 'error') {
+    row.cells[5].innerHTML = `<span style="color:var(--danger);font-size:.8rem">${data.error || ''}</span>`;
+  } else {
+    if (btn) btn.textContent = '重新整理';
+    setTimeout(() => pollJob(jobId), 4000);
+  }
+}
+
+// 自動輪詢進行中的工作
+document.querySelectorAll('[id^="row-"]').forEach(row => {
+  const badge = row.querySelector('.badge');
+  if (badge && (badge.classList.contains('badge-pending') || badge.classList.contains('badge-running'))) {
+    const jobId = row.id.replace('row-', '');
+    setTimeout(() => pollJob(jobId), 3000);
+  }
+});
+</script>
+{% endblock %}

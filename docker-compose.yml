@@ -1,0 +1,24 @@
+services:
+
+  worker:
+    build: ./worker
+    restart: unless-stopped
+    environment:
+      - DATA_DIR=/data
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - /var/opt/ncdr-risk-scanner:/data
+      - ./worker:/app
+
+  web:
+    build: ./web
+    ports:
+      - "127.0.0.1:8082:5000"
+    restart: unless-stopped
+    environment:
+      - DATA_DIR=/data
+      - SCRIPT_NAME=/ncdr
+      - FLASK_DEBUG=1
+    volumes:
+      - /var/opt/ncdr-risk-scanner:/data
+      - ./web:/app

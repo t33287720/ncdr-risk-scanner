@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}NCDR 風險分析{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css', v=ver) }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<nav>
+  <a class="brand" href="{{ url_for('index') }}">NCDR 風險分析</a>
+  <a href="{{ url_for('index') }}" {% if request.path == '/' %}class="active"{% endif %}>儀表板</a>
+  <a href="{{ url_for('map_query') }}" {% if request.path == '/map-query' %}class="active"{% endif %}>地圖查詢</a>
+  <a href="{{ url_for('about') }}" {% if request.path == '/about' %}class="active"{% endif %}>說明</a>
+</nav>
+
+{% block body %}{% endblock %}
+
+<div class="toast-container" id="toasts"></div>
+<script>
+const BASE = "{{ request.script_root }}";
+function toast(msg, type='') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+async function api(url, data) {
+  const res = await fetch(BASE + url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

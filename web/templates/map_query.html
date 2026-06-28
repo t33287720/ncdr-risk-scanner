@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}地圖查詢 — NCDR 風險分析{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.11.1/dist/geosearch.css"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map_query.css', v=ver) }}"/>
+{% endblock %}
+
+{% block body %}
+<div class="map-layout">
+  <div id="map"></div>
+  <div class="sidebar">
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('manual')">手動標記</div>
+      <div class="tab" onclick="switchTab('query')">快速查詢</div>
+    </div>
+
+    <!-- ── 手動標記 ── -->
+    <div class="tab-panel active" id="tab-manual">
+      <p class="hint">在地圖上點擊以新增地點，點擊標記可設定名稱。</p>
+      <ul class="point-list" id="pointList"></ul>
+      <hr class="divider">
+      <div>
+        <label>儲存為 KML 檔名</label>
+        <input type="text" id="manualFilename" placeholder="manual_points.kml">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary" style="flex:1" onclick="savePoints(false)">儲存 KML</button>
+        <button class="btn btn-primary"   style="flex:1" onclick="savePoints(true)">儲存並分析</button>
+      </div>
+      <button class="btn btn-secondary" onclick="clearPoints()" style="font-size:.8rem;">清除所有標記</button>
+    </div>
+
+    <!-- ── 快速查詢 ── -->
+    <div class="tab-panel" id="tab-query">
+      <p class="hint">在地圖上點擊任意地點，系統將立即查詢該點的 NCDR 風險等級。</p>
+      <div id="queryCoord" style="font-size:.8rem; color:var(--muted);">點擊地圖以選取位置</div>
+      <div>
+        <label>地點標籤（選填）</label>
+        <input type="text" id="queryLabel" placeholder="自訂名稱">
+      </div>
+      <div>
+        <label>氣候情境</label>
+        <select id="queryScenario" class="btn btn-secondary btn-sm" style="width:100%;padding:6px 8px;">
+          <option value="1.5C">1.5°C</option>
+          <option value="2C" selected>2°C（預設）</option>
+          <option value="4C">4°C</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="submitQuery()" id="queryBtn" disabled>查詢風險等級</button>
+      <div id="queryResult"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-geosearch@3.11.1/dist/bundle.min.js"></script>
+<script>
+// ── Map init ──────────────────────────────────────────────
+const map = L.map('map').setView([25.05, 121.55], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// ── Tabs（宣告在最前，避免 onclick 觸發時 TDZ 錯誤）────────
+let currentTab = 'manual';
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name !== 'manual') { manualLayer?.clearLayers(); points.length = 0; renderPointList?.(); }
+  if (name !== 'query')  { queryLayer?.clearLayers(); queryLatLng = null; }
+}
+
+// ── Address search (Photon — 開源，無需 API key) ──────────
+// 依序嘗試：TGOS（最準，需key）→ Photon（好，無需key）→ Nominatim（備援）
+const TGOS_KEY = '';  // 內政部 TGOS（選填）：https://api.tgos.tw/
+
+class TGOSProvider {
+  async search({ query }) {
+    const res = await fetch(
+      `https://api.tgos.tw/TGOS_API/addressMatch?address=${encodeURIComponent(query)}&format=JSON&token=${TGOS_KEY}`
+    );
+    const data = await res.json();
+    return (data.AddressMatchResults || []).map(r => ({
+      x: parseFloat(r.X), y: parseFloat(r.Y),
+      label: r.Address || query, bounds: null, raw: r,
+    }));
+  }
+}
+
+class CascadeProvider {
+  async search(opts) {
+    // 1. TGOS（最準確，台灣官方，選填）
+    if (TGOS_KEY) {
+      try {
+        const r = await new TGOSProvider().search(opts);
+        if (r.length) return r;
+      } catch(e) { console.warn('TGOS failed', e); }
+    }
+    // 2. Photon by Komoot（開源，無需 key，github.com/komoot/photon）
+    try {
+      const r = await new GeoSearch.PhotonProvider({ params: { lang: 'zh', limit: 5, bbox: '119,21,123,26' } }).search(opts);
+      if (r.length) return r;
+    } catch(e) { console.warn('Photon failed', e); }
+    // 3. Nominatim（最終備援）
+    return new GeoSearch.OpenStreetMapProvider({ params: { countrycodes: 'tw', limit: 5, 'accept-language': 'zh-TW' } }).search(opts);
+  }
+}
+
+const searchControl = new GeoSearch.GeoSearchControl({
+  provider: new CascadeProvider(),
+  style: 'bar',
+  searchLabel: '搜尋地址或地點...',
+  autoClose: true,
+  keepResult: true,
+});
+map.addControl(searchControl);
+
+// ── 圖層管理 ─────────────────────────────────────────────
+const manualLayer = L.layerGroup().addTo(map);   // 手動標記（藍色）
+const queryLayer  = L.layerGroup().addTo(map);   // 快速查詢（橘色，獨立圖層）
+const points = [];
+
+map.on('click', e => {
+  if (currentTab === 'manual') addPoint(e.latlng);
+  if (currentTab === 'query')  selectQueryPoint(e.latlng);
+});
+
+function addPoint(latlng) {
+  const idx = points.length;
+  const name = `地點 ${idx + 1}`;
+  points.push({ lat: latlng.lat, lon: latlng.lng, name });
+
+  const marker = L.marker(latlng).addTo(manualLayer);
+  marker.bindPopup(`
+    <div style="min-width:140px">
+      <input id="pname-${idx}" value="${name}" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:.85rem">
+      <br><button onclick="renamePoint(${idx})" style="margin-top:6px;font-size:.8rem;cursor:pointer">確認名稱</button>
+    </div>
+  `).openPopup();
+
+  renderPointList();
+}
+
+function renamePoint(idx) {
+  const val = document.getElementById(`pname-${idx}`)?.value.trim();
+  if (val) { points[idx].name = val; renderPointList(); }
+  map.closePopup();
+}
+
+function renderPointList() {
+  const ul = document.getElementById('pointList');
+  ul.innerHTML = points.map((p, i) => `
+    <li>
+      <span class="name" title="${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}">${p.name}</span>
+      <span class="rm" onclick="removePoint(${i})">×</span>
+    </li>
+  `).join('');
+}
+
+function removePoint(idx) {
+  points.splice(idx, 1);
+  manualLayer.clearLayers();
+  const copy = [...points];
+  points.length = 0;
+  copy.forEach(p => {
+    const marker = L.marker([p.lat, p.lon]).addTo(manualLayer);
+    points.push(p);
+    marker.bindPopup(`<input value="${p.name}" style="width:120px">`);
+  });
+  renderPointList();
+}
+
+function clearPoints() {
+  points.length = 0;
+  manualLayer.clearLayers();
+  renderPointList();
+}
+
+async function savePoints(andAnalyze) {
+  if (!points.length) return toast('請先新增地點', 'error');
+  let filename = document.getElementById('manualFilename').value.trim() || 'manual_points.kml';
+  if (!filename.endsWith('.kml')) filename += '.kml';
+
+  const res = await api('/api/save-points', { points, filename });
+  if (!res.ok) return toast(res.error, 'error');
+  toast(`已儲存 ${res.name}`, 'success');
+
+  if (andAnalyze) {
+    const job = await api('/api/analyze', { kml_name: res.name });
+    if (job.ok) { toast('已提交分析，跳轉至儀表板', 'success'); setTimeout(() => location.href = BASE + '/', 1000); }
+    else toast(job.error, 'error');
+  }
+}
+
+// ── Quick single-point query ─────────────────────────────
+let queryLatLng = null;
+
+function selectQueryPoint(latlng) {
+  queryLatLng = latlng;
+  queryLayer.clearLayers();
+  L.circleMarker(latlng, {
+    radius: 10, color: '#ea580c', fillColor: '#fb923c',
+    fillOpacity: 0.85, weight: 2,
+  }).addTo(queryLayer).bindPopup(
+    `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`
+  );
+  document.getElementById('queryCoord').textContent =
+    `已選取：${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+  document.getElementById('queryBtn').disabled = false;
+  document.getElementById('queryResult').innerHTML = '';
+}
+
+async function submitQuery() {
+  if (!queryLatLng) return;
+  const label = document.getElementById('queryLabel').value.trim() ||
+    `${queryLatLng.lat.toFixed(4)},${queryLatLng.lng.toFixed(4)}`;
+
+  const resultEl = document.getElementById('queryResult');
+  resultEl.innerHTML = '<div class="result-box loading"><span class="spinner"></span>查詢中，需要數十秒...</div>';
+  document.getElementById('queryBtn').disabled = true;
+
+  const scenario = document.getElementById('queryScenario').value;
+  const res = await api('/api/query-point', { lat: queryLatLng.lat, lon: queryLatLng.lng, label, scenario });
+  if (!res.ok) {
+    resultEl.innerHTML = `<div class="result-box error">${res.error}</div>`;
+    document.getElementById('queryBtn').disabled = false;
+    return;
+  }
+
+  const jobId = res.job_id;
+  const LABELS = {
+    flood_risk:        '淹水風險',
+    flood_hazard:      '淹水危害度',
+    flood_vuln:        '淹水脆弱度',
+    flood_hazard_vuln: '淹水危害脆弱度',
+    flood_exposure:    '淹水暴露度',
+land_hazard:       '坡地危害度',
+    land_hazard_vuln:  '坡地危害脆弱度',
+  };
+  const LV_COLOR = {
+    '第五級':'#9F0000','第四級':'#CA3B00','第三級':'#CA7D1D','第二級':'#CAB453','第一級':'#888','無':'#aaa'
+  };
+  function riskBadge(val) {
+    const c = LV_COLOR[val] || '#aaa';
+    return `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;background:${c}22;color:${c}">${val || '—'}</span>`;
+  }
+
+  const poll = async () => {
+    const status = await fetch(BASE + `/api/status/${jobId}`).then(r => r.json());
+    if (status.status === 'done') {
+      const r = status.results?.[0] || {};
+      const rows = Object.entries(LABELS).map(([k, lbl]) =>
+        `<tr><td style="color:var(--muted);padding:3px 0;font-size:.82rem">${lbl}</td><td style="padding:3px 0 3px 12px">${riskBadge(r[k])}</td></tr>`
+      ).join('');
+      resultEl.innerHTML = `
+        <div class="result-box done">
+          <strong style="font-size:.95rem">${label}</strong>
+          <table style="margin-top:8px;width:100%;border-collapse:collapse">${rows}</table>
+          <button class="btn btn-secondary" style="margin-top:10px;width:100%;font-size:.8rem"
+            onclick="savePointKml(${queryLatLng.lat},${queryLatLng.lng},'${label.replace(/'/g,"\\'")}')">
+            ↓ 另存為 KML
+          </button>
+        </div>`;
+      document.getElementById('queryBtn').disabled = false;
+    } else if (status.status === 'error') {
+      resultEl.innerHTML = `<div class="result-box error">查詢失敗：${status.error}</div>`;
+      document.getElementById('queryBtn').disabled = false;
+    } else {
+      setTimeout(poll, 3000);
+    }
+  };
+  setTimeout(poll, 3000);
+}
+
+async function savePointKml(lat, lon, label) {
+  const res = await api('/api/save-point-kml', { lat, lon, label });
+  if (res.ok) toast(`已儲存為 ${res.name}`, 'success');
+  else toast(res.error || '儲存失敗', 'error');
+}
+</script>
+{% endblock %}

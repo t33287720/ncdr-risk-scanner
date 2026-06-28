@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}分析結果 — {{ job.kml_name }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/results.css', v=ver) }}"/>
+{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <div class="result-header">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">← 返回儀表板</a>
+    <div>
+      <h2 style="font-size:1.1rem;">{{ job.kml_name }}</h2>
+      <div class="meta">
+        建立：{{ job.created }}
+        {% if job.finished %} &nbsp;·&nbsp; 完成：{{ job.finished }}{% endif %}
+        {% if job.count is defined %} &nbsp;·&nbsp; {{ job.count }} 個地點{% endif %}
+      </div>
+    </div>
+    <span class="badge badge-{{ job.status }}" style="font-size:.85rem; padding:4px 12px;">
+      {{ {'pending':'等待中','running':'分析中','done':'完成','error':'錯誤'}.get(job.status, job.status) }}
+    </span>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+      <a class="btn btn-primary" href="{{ url_for('results_csv', job_id=job.id) }}">↓ 下載 CSV</a>
+    </div>
+  </div>
+
+  {% if job.status == 'done' %}
+
+    {% if job.summary %}
+    <div class="card">
+      <span class="card-title">淹水風險分佈（{{ scenario_label }} 情境）</span>
+      <div class="summary-grid">
+        <div class="summary-item lv5">
+          <div class="count">{{ job.summary.get('第五級', 0) }}</div>
+          <div class="label">第五級</div>
+        </div>
+        <div class="summary-item lv4">
+          <div class="count">{{ job.summary.get('第四級', 0) }}</div>
+          <div class="label">第四級</div>
+        </div>
+        <div class="summary-item lv3">
+          <div class="count">{{ job.summary.get('第三級', 0) }}</div>
+          <div class="label">第三級</div>
+        </div>
+        <div class="summary-item lv2">
+          <div class="count">{{ job.summary.get('第二級', 0) }}</div>
+          <div class="label">第二級</div>
+        </div>
+        <div class="summary-item lv1">
+          <div class="count">{{ job.summary.get('第一級', 0) }}</div>
+          <div class="label">第一級</div>
+        </div>
+        <div class="summary-item lv0">
+          <div class="count">{{ job.summary.get('無', 0) }}</div>
+          <div class="label">無資料</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if rows %}
+    <div class="card" style="overflow-x:auto;">
+      <span class="card-title">詳細風險資料（{{ scenario_label }} 情境）</span>
+      <table class="risk-table">
+        <thead>
+          <tr>
+            <th>地點名稱</th>
+            <th colspan="5" class="group-flood">淹水（{{ scenario_label }} 情境）</th>
+            <th colspan="2" class="group-land">坡地（{{ scenario_label }} 情境）</th>
+          </tr>
+          <tr>
+            <th></th>
+            <th class="group-flood">風險</th>
+            <th class="group-flood">危害度</th>
+            <th class="group-flood">脆弱度</th>
+            <th class="group-flood">危害脆弱度</th>
+            <th class="group-flood">暴露度</th>
+            <th class="group-land">危害度</th>
+            <th class="group-land">危害脆弱度</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td class="name-cell">{{ r['地點名稱'] }}</td>
+            <td>{{ r.get('淹水風險',       r.get('風險等級','—')) | risk_badge }}</td>
+            <td>{{ r.get('淹水危害度',     '—') | risk_badge }}</td>
+            <td>{{ r.get('淹水脆弱度',     '—') | risk_badge }}</td>
+            <td>{{ r.get('淹水危害脆弱度', '—') | risk_badge }}</td>
+            <td>{{ r.get('淹水暴露度',     '—') | risk_badge }}</td>
+            <td>{{ r.get('坡地危害度',     '—') | risk_badge }}</td>
+            <td>{{ r.get('坡地危害脆弱度', '—') | risk_badge }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <div class="card" style="padding:0; overflow:hidden;">
+      <iframe class="map-frame" src="{{ url_for('results_map', job_id=job.id) }}" frameborder="0"></iframe>
+    </div>
+
+  {% elif job.status == 'running' %}
+    <div class="card" style="text-align:center; padding:48px;">
+      <div style="font-size:2rem; margin-bottom:12px;">⏳</div>
+      <div style="font-weight:600; margin-bottom:8px;">分析進行中...</div>
+      <div class="meta">系統正逐一呼叫 NCDR API 查詢各地點風險資料，請稍候。</div>
+      <div class="meta" style="margin-top:6px;">頁面將自動更新</div>
+    </div>
+
+  {% elif job.status == 'pending' %}
+    <div class="card" style="text-align:center; padding:48px;">
+      <div style="font-size:2rem; margin-bottom:12px;">🕐</div>
+      <div style="font-weight:600; margin-bottom:8px;">排隊等待中...</div>
+      <div class="meta">系統將依序處理，頁面將自動更新</div>
+    </div>
+
+  {% elif job.status == 'error' %}
+    <div class="card" style="border-color:var(--danger);">
+      <span class="card-title" style="color:var(--danger);">分析失敗</span>
+      <p style="font-size:.875rem;">{{ job.error }}</p>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if job.status in ['pending', 'running'] %}
+<script>
+function checkStatus() {
+  fetch(BASE + '/api/status/{{ job.id }}').then(r => r.json()).then(data => {
+    if (data.status === 'done' || data.status === 'error') location.reload();
+    else setTimeout(checkStatus, 4000);
+  });
+}
+setTimeout(checkStatus, 4000);
+</script>
+{% endif %}
+{% endblock %}

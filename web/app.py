@@ -62,15 +62,17 @@ for d in [KML_DIR, POINTS_DIR, RESULTS_DIR, JOBS_DIR]:
 
 # ── Helpers ───────────────────────────────────────────────
 
-def _load_jobs(limit=30):
+def _load_jobs(limit=50):
     jobs = []
-    for f in sorted(glob.glob(os.path.join(JOBS_DIR, '*.json')), reverse=True)[:limit]:
+    for f in glob.glob(os.path.join(JOBS_DIR, '*.json')):
         try:
             with open(f, encoding='utf-8') as fh:
                 jobs.append(json.load(fh))
         except Exception:
             pass
-    return jobs
+    # 依建立時間排序（最新的在前），取前 limit 筆
+    jobs.sort(key=lambda j: j.get('created', ''), reverse=True)
+    return jobs[:limit]
 
 
 def _points_to_kml(points):
@@ -122,7 +124,7 @@ def index():
         kmls.append({
             'name':     name,
             'size':     os.path.getsize(f),
-            'modified': datetime.fromtimestamp(os.path.getmtime(f)).strftime('%Y-%m-%d %H:%M'),
+            'modified': datetime.fromtimestamp(os.path.getmtime(f), tz=TW_TZ).strftime('%Y-%m-%d %H:%M'),
         })
     jobs = _load_jobs()
     batch_jobs = [j for j in jobs if j.get('status') == 'done'

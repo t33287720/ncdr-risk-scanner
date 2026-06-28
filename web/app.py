@@ -209,7 +209,7 @@ def upload_kml():
 
 @app.route('/api/delete-kml', methods=['POST'])
 def delete_kml():
-    name = secure_filename(request.json.get('name', ''))
+    name = secure_filename((request.json or {}).get('name', ''))
     path = os.path.join(KML_DIR, name)
     if os.path.exists(path):
         os.remove(path)
@@ -218,13 +218,14 @@ def delete_kml():
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
-    kml_name = secure_filename(request.json.get('kml_name', ''))
+    data     = request.json or {}
+    kml_name = secure_filename(data.get('kml_name', ''))
     kml_path = os.path.realpath(os.path.join(KML_DIR, kml_name))
     if not kml_path.startswith(os.path.realpath(KML_DIR) + os.sep):
         return jsonify({'error': '無效的檔案名稱'}), 400
     if not os.path.exists(kml_path):
         return jsonify({'error': 'KML 不存在'}), 404
-    scenario = request.json.get('scenario', '2C')
+    scenario = data.get('scenario', '2C')
     job_id = _create_job(kml_name, scenario)
     return jsonify({'ok': True, 'job_id': job_id})
 
@@ -241,7 +242,7 @@ def job_status(job_id):
 @app.route('/api/save-points', methods=['POST'])
 def save_points():
     """Save manually placed map points as a KML file."""
-    data     = request.json
+    data     = request.json or {}
     points   = data.get('points', [])
     filename = secure_filename(data.get('filename', 'manual.kml'))
     if not filename.endswith('.kml'):
@@ -259,7 +260,7 @@ def save_points():
 @app.route('/api/query-point', methods=['POST'])
 def query_point():
     """Create a single-point analysis job — saves to points/ (not shown in KML list)."""
-    data = request.json
+    data = request.json or {}
     try:
         lat = float(data.get('lat'))
         lon = float(data.get('lon'))
@@ -282,7 +283,7 @@ def query_point():
 @app.route('/api/save-point-kml', methods=['POST'])
 def save_point_kml():
     """把快速查詢的點另存為 KML（顯示在列表中），以時間戳命名。"""
-    data    = request.json
+    data    = request.json or {}
     try:
         lat = float(data.get('lat'))
         lon = float(data.get('lon'))

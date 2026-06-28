@@ -252,7 +252,13 @@ land_hazard:       '坡地危害度',
     return `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;background:${c}22;color:${c}">${val || '—'}</span>`;
   }
 
+  const deadline = Date.now() + 10 * 60 * 1000;  // 10 分鐘 timeout
   const poll = async () => {
+    if (Date.now() > deadline) {
+      resultEl.innerHTML = `<div class="result-box error">查詢逾時，請重試</div>`;
+      document.getElementById('queryBtn').disabled = false;
+      return;
+    }
     const status = await fetch(BASE + `/api/status/${jobId}`).then(r => r.json());
     if (status.status === 'done') {
       const r = status.results?.[0] || {};
@@ -261,16 +267,16 @@ land_hazard:       '坡地危害度',
       ).join('');
       resultEl.innerHTML = `
         <div class="result-box done">
-          <strong style="font-size:.95rem">${label}</strong>
+          <strong style="font-size:.95rem">${escHtml(label)}</strong>
           <table style="margin-top:8px;width:100%;border-collapse:collapse">${rows}</table>
           <button class="btn btn-secondary" style="margin-top:10px;width:100%;font-size:.8rem"
-            onclick="savePointKml(${queryLatLng.lat},${queryLatLng.lng},'${label.replace(/'/g,"\\'")}')">
+            onclick="savePointKml(${queryLatLng.lat},${queryLatLng.lng},${JSON.stringify(label)})">
             ↓ 另存為 KML
           </button>
         </div>`;
       document.getElementById('queryBtn').disabled = false;
     } else if (status.status === 'error') {
-      resultEl.innerHTML = `<div class="result-box error">查詢失敗：${status.error}</div>`;
+      resultEl.innerHTML = `<div class="result-box error">查詢失敗：${escHtml(status.error || '')}</div>`;
       document.getElementById('queryBtn').disabled = false;
     } else {
       setTimeout(poll, 3000);

@@ -18,6 +18,7 @@ TW_TZ = timezone(timedelta(hours=8))
 def now_tw():
     return datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
+import tempfile
 import requests
 from bs4 import BeautifulSoup
 import folium
@@ -223,6 +224,14 @@ def save_results(results, output_dir):
     m.save(os.path.join(output_dir, 'map.html'))
 
 
+def _write_job(job_file, job):
+    """原子寫入：先寫暫存檔再 rename，避免讀到寫到一半的 JSON。"""
+    tmp = job_file + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(job, f, ensure_ascii=False)
+    os.replace(tmp, job_file)
+
+
 # ── 工作處理 ─────────────────────────────────────────────
 
 def process_job(job_file):
@@ -235,8 +244,7 @@ def process_job(job_file):
 
     job['status']  = 'running'
     job['started'] = now_tw()
-    with open(job_file, 'w', encoding='utf-8') as f:
-        json.dump(job, f, ensure_ascii=False)
+    _write_job(job_file, job)
 
     try:
         entries = parse_kml(kml_path)
@@ -275,8 +283,7 @@ def process_job(job_file):
         job['status'] = 'error'
         job['error']  = str(e)
 
-    with open(job_file, 'w', encoding='utf-8') as f:
-        json.dump(job, f, ensure_ascii=False)
+    _write_job(job_file, job)
     print(f"[{job_id}] 完成")
 
 

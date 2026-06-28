@@ -84,7 +84,7 @@
         <tbody>
           {% for r in rows %}
           <tr>
-            <td class="name-cell">{{ r['地點名稱'] }}</td>
+            <td class="name-cell">{{ r.get('地點名稱', '—') }}</td>
             <td>{{ r.get('淹水風險',       r.get('風險等級','—')) | risk_badge }}</td>
             <td>{{ r.get('淹水危害度',     '—') | risk_badge }}</td>
             <td>{{ r.get('淹水脆弱度',     '—') | risk_badge }}</td>

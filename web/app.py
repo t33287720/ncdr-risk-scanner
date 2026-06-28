@@ -239,8 +239,14 @@ def save_points():
 def query_point():
     """Create a single-point analysis job — saves to points/ (not shown in KML list)."""
     data = request.json
-    lat, lon  = data.get('lat'), data.get('lon')
-    label     = data.get('label', f'{lat:.4f},{lon:.4f}')
+    try:
+        lat = float(data.get('lat'))
+        lon = float(data.get('lon'))
+    except (TypeError, ValueError):
+        return jsonify({'error': '無效的座標'}), 400
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return jsonify({'error': '座標超出範圍'}), 400
+    label     = data.get('label') or f'{lat:.4f},{lon:.4f}'
     filename  = f'point_{uuid.uuid4().hex[:6]}.kml'
     kml_path  = os.path.join(POINTS_DIR, filename)
 
@@ -256,9 +262,12 @@ def query_point():
 def save_point_kml():
     """把快速查詢的點另存為 KML（顯示在列表中），以時間戳命名。"""
     data    = request.json
-    lat     = data.get('lat')
-    lon     = data.get('lon')
-    label   = data.get('label', f'{lat:.4f},{lon:.4f}')
+    try:
+        lat = float(data.get('lat'))
+        lon = float(data.get('lon'))
+    except (TypeError, ValueError):
+        return jsonify({'error': '無效的座標'}), 400
+    label   = data.get('label') or f'{lat:.4f},{lon:.4f}'
     ts      = datetime.now(TW_TZ).strftime('%Y%m%d_%H%M%S')
     filename = secure_filename(f'query_{ts}.kml')
 

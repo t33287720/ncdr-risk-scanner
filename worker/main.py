@@ -208,16 +208,17 @@ def save_results(results, output_dir):
     center_lat = sum(r['lat'] for r in results) / len(results)
     center_lon = sum(r['lon'] for r in results) / len(results)
     m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+    from html import escape as _esc
     for r in results:
         popup_html = (
-            f"<b>{r['name']}</b><br>"
-            f"淹水風險：{r['flood_risk']}<br>"
-            f"淹水危害度：{r['flood_hazard']}<br>"
-            f"淹水脆弱度：{r['flood_vuln']}<br>"
-            f"淹水危害脆弱度：{r['flood_hazard_vuln']}<br>"
-            f"淹水暴露度：{r['flood_exposure']}<br>"
-            f"坡地危害度：{r['land_hazard']}<br>"
-            f"坡地危害脆弱度：{r['land_hazard_vuln']}"
+            f"<b>{_esc(str(r['name']))}</b><br>"
+            f"淹水風險：{_esc(str(r['flood_risk']))}<br>"
+            f"淹水危害度：{_esc(str(r['flood_hazard']))}<br>"
+            f"淹水脆弱度：{_esc(str(r['flood_vuln']))}<br>"
+            f"淹水危害脆弱度：{_esc(str(r['flood_hazard_vuln']))}<br>"
+            f"淹水暴露度：{_esc(str(r['flood_exposure']))}<br>"
+            f"坡地危害度：{_esc(str(r['land_hazard']))}<br>"
+            f"坡地危害脆弱度：{_esc(str(r['land_hazard_vuln']))}"
         )
         folium.CircleMarker(
             location=[r['lat'], r['lon']],

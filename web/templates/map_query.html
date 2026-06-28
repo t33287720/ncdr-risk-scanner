@@ -140,7 +140,7 @@ function addPoint(latlng) {
   const marker = L.marker(latlng).addTo(manualLayer);
   marker.bindPopup(`
     <div style="min-width:140px">
-      <input id="pname-${idx}" value="${name}" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:.85rem">
+      <input id="pname-${idx}" value="${escHtml(name)}" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:.85rem">
       <br><button onclick="renamePoint(${idx})" style="margin-top:6px;font-size:.8rem;cursor:pointer">確認名稱</button>
     </div>
   `).openPopup();
@@ -158,7 +158,7 @@ function renderPointList() {
   const ul = document.getElementById('pointList');
   ul.innerHTML = points.map((p, i) => `
     <li>
-      <span class="name" title="${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}">${p.name}</span>
+      <span class="name" title="${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}">${escHtml(p.name)}</span>
       <span class="rm" onclick="removePoint(${i})">×</span>
     </li>
   `).join('');
@@ -172,7 +172,7 @@ function removePoint(idx) {
   copy.forEach(p => {
     const marker = L.marker([p.lat, p.lon]).addTo(manualLayer);
     points.push(p);
-    marker.bindPopup(`<input value="${p.name}" style="width:120px">`);
+    marker.bindPopup(`<input value="${escHtml(p.name)}" style="width:120px">`);
   });
   renderPointList();
 }

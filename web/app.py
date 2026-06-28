@@ -212,8 +212,11 @@ def delete_kml():
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
-    kml_name = request.json.get('kml_name', '')
-    if not os.path.exists(os.path.join(KML_DIR, kml_name)):
+    kml_name = secure_filename(request.json.get('kml_name', ''))
+    kml_path = os.path.realpath(os.path.join(KML_DIR, kml_name))
+    if not kml_path.startswith(os.path.realpath(KML_DIR) + os.sep):
+        return jsonify({'error': '無效的檔案名稱'}), 400
+    if not os.path.exists(kml_path):
         return jsonify({'error': 'KML 不存在'}), 404
     scenario = request.json.get('scenario', '2C')
     job_id = _create_job(kml_name, scenario)

@@ -18,7 +18,6 @@ TW_TZ = timezone(timedelta(hours=8))
 def now_tw():
     return datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
-import tempfile
 import requests
 from bs4 import BeautifulSoup
 import folium

@@ -14,7 +14,7 @@ TW_TZ = timezone(timedelta(hours=8))
 def now_tw():
     return datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Flask, abort, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)

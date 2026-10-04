@@ -64,6 +64,30 @@
     </div>
     {% endif %}
 
+    {% if compare and rows %}
+    <div class="card" style="overflow-x:auto;">
+      <span class="card-title">三種暖化情境對比（淹水風險）</span>
+      <div class="meta" style="margin-bottom:8px;">趨勢＝4°C 相較 1.5°C 的淹水風險等級變化；下方詳細表格為 2°C 情境。</div>
+      <table class="risk-table" id="compareTable">
+        <thead>
+          <tr><th>地點名稱</th><th>1.5°C</th><th>2°C</th><th>4°C</th><th>趨勢</th></tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          {% set trend = r.get('風險趨勢(1.5→4°C)', '無資料') %}
+          <tr>
+            <td class="name-cell">{{ r.get('地點名稱', '—') }}</td>
+            <td>{{ r.get('淹水風險(1.5°C)', '—') | risk_badge }}</td>
+            <td>{{ r.get('淹水風險(2°C)', '—') | risk_badge }}</td>
+            <td>{{ r.get('淹水風險(4°C)', '—') | risk_badge }}</td>
+            <td><span class="trend trend-{{ {'上升':'up','下降':'down','持平':'flat'}.get(trend, 'na') }}">{{ {'上升':'▲ 上升','下降':'▼ 下降','持平':'－ 持平'}.get(trend, '—') }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
     {% if rows %}
     <div class="card" style="overflow-x:auto;">
     {% elif job.status == 'done' %}

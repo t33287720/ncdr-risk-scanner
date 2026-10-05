@@ -22,7 +22,6 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB
 
 _prefix = os.environ.get('SCRIPT_NAME', '')
 if _prefix:
-    from werkzeug.middleware.proxy_fix import ProxyFix
     class _PrefixMiddleware:
         def __init__(self, wsgi_app):
             self.wsgi_app = wsgi_app

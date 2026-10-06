@@ -145,8 +145,7 @@ def about():
     return render_template('about.html')
 
 
-@app.route('/results/<job_id>')
-def results(job_id):
+def _load_job_rows(job_id):
     job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
     if not os.path.exists(job_file):
         abort(404)
@@ -157,8 +156,57 @@ def results(job_id):
     if os.path.exists(csv_path):
         with open(csv_path, encoding='utf-8-sig') as f:
             rows = list(csv_mod.DictReader(f))
+    return job, rows
+
+
+@app.route('/results/<job_id>')
+def results(job_id):
+    job, rows = _load_job_rows(job_id)
     scenario_label = SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
     return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label)
+
+
+LEVEL_NAMES = {1: '第一級', 2: '第二級', 3: '第三級', 4: '第四級', 5: '第五級'}
+_LEVEL_NUM = {'第一級': 1, '第二級': 2, '第三級': 3, '第四級': 4, '第五級': 5}
+# 報告用的風險維度：(CSV 欄位, 顯示名稱)
+_REPORT_DIMS = [
+    ('淹水風險', '淹水風險'), ('淹水危害度', '淹水危害度'), ('淹水脆弱度', '淹水脆弱度'),
+    ('淹水危害脆弱度', '淹水危害脆弱度'), ('淹水暴露度', '淹水暴露度'),
+    ('坡地危害度', '坡地危害度'), ('坡地危害脆弱度', '坡地危害脆弱度'),
+]
+
+
+@app.route('/results/<job_id>/report')
+def results_report(job_id):
+    job, rows = _load_job_rows(job_id)
+    if job.get('status') != 'done':
+        abort(404)
+    scenario_label = SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
+
+    dims = []
+    for col, label in _REPORT_DIMS:
+        counts = {n: 0 for n in range(1, 6)}
+        other = 0
+        for r in rows:
+            lv = _LEVEL_NUM.get((r.get(col) or '').strip())
+            if lv:
+                counts[lv] += 1
+            else:
+                other += 1
+        dims.append({'label': label, 'counts': counts, 'other': other})
+
+    ranked = []
+    for r in rows:
+        levels = [_LEVEL_NUM.get((r.get(col) or '').strip(), 0) for col, _ in _REPORT_DIMS]
+        top = max(levels)
+        if top:
+            ranked.append((top, sum(levels), r))
+    ranked.sort(key=lambda t: (-t[0], -t[1]))
+    top_rows = [{'row': r, 'top': LEVEL_NAMES[top]} for top, _, r in ranked[:10]]
+
+    return render_template('report.html', job=job, rows=rows, dims=dims,
+                           top_rows=top_rows, scenario_label=scenario_label,
+                           generated=now_tw(), level_names=LEVEL_NAMES)
 
 
 @app.route('/results/<job_id>/map')

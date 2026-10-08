@@ -90,8 +90,8 @@ def _points_to_kml(points):
     return '\n'.join(lines)
 
 
-VALID_SCENARIOS = {'1.5C', '2C', '4C'}
-SCENARIO_LABELS = {'1.5C': '1.5°C', '2C': '2°C', '4C': '4°C'}
+VALID_SCENARIOS = {'1.5C', '2C', '4C', 'all'}   # all = 三情境對比
+SCENARIO_LABELS = {'1.5C': '1.5°C', '2C': '2°C', '4C': '4°C', 'all': '三情境對比'}
 
 def _create_job(kml_name, scenario='2C'):
     return _create_job_with_path(kml_name, os.path.join(KML_DIR, kml_name), scenario, 'batch')
@@ -156,8 +156,11 @@ def results(job_id):
     if os.path.exists(csv_path):
         with open(csv_path, encoding='utf-8-sig') as f:
             rows = list(csv_mod.DictReader(f))
-    scenario_label = SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
-    return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label)
+    compare = job.get('scenario') == 'all'
+    # 三情境模式的主表格以 2°C 為基準，另有對比表
+    scenario_label = '2°C' if compare else SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
+    return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label,
+                           compare=compare)
 
 
 @app.route('/results/<job_id>/map')

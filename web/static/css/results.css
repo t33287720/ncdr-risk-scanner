@@ -131,3 +131,9 @@
 .risk-table th.sortable:hover { background: var(--border); }
 .risk-table th.sorted-asc::after  { content: ' ▲'; font-size: .7em; }
 .risk-table th.sorted-desc::after { content: ' ▼'; font-size: .7em; }
+
+/* 三情境對比：風險趨勢 */
+.trend { font-weight: 600; font-size: .85rem; white-space: nowrap; }
+.trend-up   { color: #CA3B00; }
+.trend-down { color: #2e7d32; }
+.trend-flat, .trend-na { color: var(--muted); }

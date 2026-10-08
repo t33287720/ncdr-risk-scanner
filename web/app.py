@@ -14,7 +14,7 @@ TW_TZ = timezone(timedelta(hours=8))
 def now_tw():
     return datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Flask, abort, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -22,7 +22,6 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB
 
 _prefix = os.environ.get('SCRIPT_NAME', '')
 if _prefix:
-    from werkzeug.middleware.proxy_fix import ProxyFix
     class _PrefixMiddleware:
         def __init__(self, wsgi_app):
             self.wsgi_app = wsgi_app
@@ -91,8 +90,8 @@ def _points_to_kml(points):
     return '\n'.join(lines)
 
 
-VALID_SCENARIOS = {'1.5C', '2C', '4C'}
-SCENARIO_LABELS = {'1.5C': '1.5°C', '2C': '2°C', '4C': '4°C'}
+VALID_SCENARIOS = {'1.5C', '2C', '4C', 'all'}   # all = 三情境對比
+SCENARIO_LABELS = {'1.5C': '1.5°C', '2C': '2°C', '4C': '4°C', 'all': '三情境對比'}
 
 def _create_job(kml_name, scenario='2C'):
     return _create_job_with_path(kml_name, os.path.join(KML_DIR, kml_name), scenario, 'batch')
@@ -159,11 +158,18 @@ def _load_job_rows(job_id):
     return job, rows
 
 
+def _scenario_label(job):
+    """回傳 (是否為三情境模式, 主表格的情境標籤)；三情境模式的主表格以 2°C 為基準，另有對比表。"""
+    compare = job.get('scenario') == 'all'
+    return compare, '2°C' if compare else SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
+
+
 @app.route('/results/<job_id>')
 def results(job_id):
     job, rows = _load_job_rows(job_id)
-    scenario_label = SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
-    return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label)
+    compare, scenario_label = _scenario_label(job)
+    return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label,
+                           compare=compare)
 
 
 LEVEL_NAMES = {1: '第一級', 2: '第二級', 3: '第三級', 4: '第四級', 5: '第五級'}
@@ -181,7 +187,7 @@ def results_report(job_id):
     job, rows = _load_job_rows(job_id)
     if job.get('status') != 'done':
         abort(404)
-    scenario_label = SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
+    _, scenario_label = _scenario_label(job)
 
     dims = []
     for col, label in _REPORT_DIMS:

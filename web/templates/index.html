@@ -29,6 +29,7 @@
           <option value="1.5C">1.5°C</option>
           <option value="2C" selected>2°C（預設）</option>
           <option value="4C">4°C</option>
+          <option value="all">三情境對比（查詢量 3 倍，較耗時）</option>
         </select>
         <a class="btn btn-secondary btn-sm" href="{{ url_for('map_query') }}">+ 地圖新增</a>
         <label class="btn btn-primary btn-sm" style="cursor:pointer;">
@@ -74,7 +75,7 @@
         <tr id="row-{{ job.id }}">
           <td>{{ job.kml_name }}</td>
           <td style="color:var(--muted)">{{ job.created }}</td>
-          <td style="color:var(--muted)">{{ {'1.5C':'1.5°C','2C':'2°C','4C':'4°C'}.get(job.get('scenario','2C'),'2°C') }}</td>
+          <td style="color:var(--muted)">{{ {'1.5C':'1.5°C','2C':'2°C','4C':'4°C','all':'三情境對比'}.get(job.get('scenario','2C'),'2°C') }}</td>
           <td><span class="badge badge-{{ job.status }}">{{ {'pending':'等待中','running':'分析中','done':'完成','error':'錯誤'}.get(job.status, job.status) }}</span></td>
           <td>{{ job.count if job.count is defined else '—' }}</td>
           <td>
@@ -134,7 +135,7 @@ if (document.getElementById('dashMap') && allPoints.length) {
       <b>${escHtml(p.name)}</b>
       <span style="font-size:.75rem;color:#888;margin-left:6px">${isPoint ? '快速查詢' : '批次分析'}</span><br>
       淹水風險：${escHtml(p.flood_risk)}<br>
-      情境：${escHtml(p.scenario)}<br>
+      情境：${escHtml(p.scenario === 'all' ? '三情境對比（顯示 2°C）' : p.scenario)}<br>
       來源：${escHtml(p.kml)}<br>
       <a href="${BASE}/results/${escHtml(p.job_id)}" style="font-size:.8rem">查看完整結果 →</a>
     `);

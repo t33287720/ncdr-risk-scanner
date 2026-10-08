@@ -11,14 +11,15 @@ import glob
 import time
 import math
 import csv
+import shutil
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
+from html import escape as _esc
 
 TW_TZ = timezone(timedelta(hours=8))
 def now_tw():
     return datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
-import tempfile
 import requests
 from bs4 import BeautifulSoup
 import folium
@@ -41,6 +42,7 @@ SCENARIO_LAYERS = {
     '4C':   '20',
 }
 DEFAULT_SCENARIO = '2C'
+ALL_SCENARIOS = 'all'   # 一次查 1.5／2／4°C 三種情境，結果並排比較
 
 RISK_COLORS = {
     '第一級': '#CACABA',
@@ -56,7 +58,6 @@ for d in [JOBS_DIR, RESULTS_DIR, KML_DIR]:
 
 _seed = '/app/test.kml'
 if os.path.exists(_seed) and not os.path.exists(os.path.join(KML_DIR, 'test.kml')):
-    import shutil
     shutil.copy(_seed, os.path.join(KML_DIR, 'test.kml'))
 
 
@@ -161,6 +162,33 @@ def query_risk(lat, lon, scenario=DEFAULT_SCENARIO):
     return result
 
 
+def _level_num(label):
+    for n, name in RISK_LEVELS.items():
+        if name == label:
+            return n
+    return None
+
+
+def query_risk_all(lat, lon):
+    """查三種情境：主要欄位沿用預設情境，另附各情境淹水風險與升降趨勢。"""
+    per = {sc: query_risk(lat, lon, sc) for sc in SCENARIO_LAYERS}
+    result = dict(per[DEFAULT_SCENARIO])
+    for sc, r in per.items():
+        result[f'flood_risk_{sc}'] = r['flood_risk']
+        result[f'land_hazard_{sc}'] = r['land_hazard']
+    low  = _level_num(per['1.5C']['flood_risk'])
+    high = _level_num(per['4C']['flood_risk'])
+    if low is None or high is None:
+        result['flood_trend'] = '無資料'
+    elif high > low:
+        result['flood_trend'] = '上升'
+    elif high < low:
+        result['flood_trend'] = '下降'
+    else:
+        result['flood_trend'] = '持平'
+    return result
+
+
 # ── KML 解析 ─────────────────────────────────────────────
 
 def parse_kml(kml_path):
@@ -193,14 +221,28 @@ CSV_FIELDS = [
     ('land_hazard_vuln', '坡地危害脆弱度'),
 ]
 
-def save_results(results, output_dir):
+RISK_FIELDS = [key for key, _ in CSV_FIELDS[3:]]
+
+# 三情境模式額外輸出的欄位（1.5°C → 4°C 淹水風險升降）
+COMPARE_FIELDS = [
+    ('flood_risk_1.5C',  '淹水風險(1.5°C)'),
+    ('flood_risk_2C',    '淹水風險(2°C)'),
+    ('flood_risk_4C',    '淹水風險(4°C)'),
+    ('land_hazard_1.5C', '坡地危害度(1.5°C)'),
+    ('land_hazard_2C',   '坡地危害度(2°C)'),
+    ('land_hazard_4C',   '坡地危害度(4°C)'),
+    ('flood_trend',      '風險趨勢(1.5→4°C)'),
+]
+
+def save_results(results, output_dir, compare=False):
     os.makedirs(output_dir, exist_ok=True)
+    fields = CSV_FIELDS + COMPARE_FIELDS if compare else CSV_FIELDS
 
     with open(os.path.join(output_dir, 'results.csv'), 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
-        writer.writerow([label for _, label in CSV_FIELDS])
+        writer.writerow([label for _, label in fields])
         for r in results:
-            writer.writerow([r.get(key, '') for key, _ in CSV_FIELDS])
+            writer.writerow([r.get(key, '') for key, _ in fields])
 
     if not results:
         return
@@ -208,7 +250,6 @@ def save_results(results, output_dir):
     center_lat = sum(r['lat'] for r in results) / len(results)
     center_lon = sum(r['lon'] for r in results) / len(results)
     m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-    from html import escape as _esc
     for r in results:
         popup_html = (
             f"<b>{_esc(str(r['name']))}</b><br>"
@@ -220,6 +261,13 @@ def save_results(results, output_dir):
             f"坡地危害度：{_esc(str(r['land_hazard']))}<br>"
             f"坡地危害脆弱度：{_esc(str(r['land_hazard_vuln']))}"
         )
+        if compare:
+            popup_html += (
+                f"<hr style='margin:4px 0'>淹水風險 1.5°C：{_esc(str(r.get('flood_risk_1.5C', '錯誤')))}"
+                f" ／ 2°C：{_esc(str(r.get('flood_risk_2C', '錯誤')))}"
+                f" ／ 4°C：{_esc(str(r.get('flood_risk_4C', '錯誤')))}<br>"
+                f"趨勢：{_esc(str(r.get('flood_trend', '無資料')))}"
+            )
         folium.CircleMarker(
             location=[r['lat'], r['lon']],
             radius=10,
@@ -259,33 +307,31 @@ def process_job(job_file):
         entries = parse_kml(kml_path)  # 在 try 內，失敗會正確設為 error
         print(f"[{job_id}] {len(entries)} 個地點")
 
+        scenario = job.get('scenario', DEFAULT_SCENARIO)
+        compare  = scenario == ALL_SCENARIOS
         results = []
         for entry in entries:
-            scenario = job.get('scenario', DEFAULT_SCENARIO)
             try:
-                risk = query_risk(entry['lat'], entry['lon'], scenario)
+                if compare:
+                    risk = query_risk_all(entry['lat'], entry['lon'])
+                else:
+                    risk = query_risk(entry['lat'], entry['lon'], scenario)
                 print(f"  {entry['name']} → 淹水:{risk['flood_risk']} 坡地H:{risk['land_hazard']}")
                 results.append({**entry, **risk})
             except Exception as e:
                 print(f"  {entry['name']} 錯誤: {e}")
                 results.append({**entry, 'level': '錯誤', 'color': '#000000',
-                                 'flood_risk': '錯誤', 'flood_hazard': '錯誤',
-                                 'flood_vuln': '錯誤', 'flood_hazard_vuln': '錯誤',
-                                 'flood_exposure': '錯誤', 'land_hazard': '錯誤',
-                                 'land_hazard_vuln': '錯誤'})
+                                **{k: '錯誤' for k in RISK_FIELDS}})
 
-        save_results(results, os.path.join(RESULTS_DIR, job_id))
+        save_results(results, os.path.join(RESULTS_DIR, job_id), compare)
 
         job['status']   = 'done'
         job['finished'] = now_tw()
         job['count']    = len(results)
         job['summary']  = {lvl: sum(1 for r in results if r.get('flood_risk') == lvl)
                            for lvl in ['第五級', '第四級', '第三級', '第二級', '第一級', '無', '錯誤']}
-        job['results']  = [{**{k: r.get(k, '無') for k in
-                            ['name', 'lat', 'lon', 'flood_risk', 'flood_hazard',
-                             'flood_vuln', 'flood_hazard_vuln', 'flood_exposure',
-                             'land_hazard', 'land_hazard_vuln']},
-                            'scenario': job.get('scenario', DEFAULT_SCENARIO)}
+        job['results']  = [{**{k: r.get(k, '無') for k in ['name', 'lat', 'lon', *RISK_FIELDS]},
+                            'scenario': scenario}
                            for r in results]
 
     except Exception as e:
@@ -299,7 +345,6 @@ def process_job(job_file):
 
 def _cleanup_old_jobs(keep=100):
     """保留最新 keep 筆，其餘連同 results 一併刪除。"""
-    import shutil
     all_jobs = sorted(glob.glob(os.path.join(JOBS_DIR, '*.json')))
     to_delete = all_jobs[:-keep] if len(all_jobs) > keep else []
     for job_file in to_delete:

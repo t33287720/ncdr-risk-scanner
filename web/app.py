@@ -284,6 +284,29 @@ def analyze():
     return jsonify({'ok': True, 'job_id': job_id})
 
 
+@app.route('/api/retry/<job_id>', methods=['POST'])
+def retry_failed(job_id):
+    """只重查失敗的地點：把已完成的工作改回 pending 並標記 retry，由 worker 處理。"""
+    job_file = os.path.join(JOBS_DIR, f'{secure_filename(job_id)}.json')
+    if not os.path.exists(job_file):
+        return jsonify({'error': '找不到工作'}), 404
+    with open(job_file, encoding='utf-8') as f:
+        job = json.load(f)
+    if job.get('status') != 'done':
+        return jsonify({'error': '分析尚未完成'}), 400
+    if not any(r.get('flood_risk') == '錯誤' for r in job.get('results', [])):
+        return jsonify({'error': '沒有失敗的地點'}), 400
+    if not os.path.exists(os.path.join(RESULTS_DIR, job['id'], 'results.json')):
+        return jsonify({'error': '此工作建立於舊版本，無法只重查失敗地點，請重新分析'}), 400
+    job['status'] = 'pending'
+    job['retry']  = True
+    tmp = job_file + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(job, f, ensure_ascii=False)
+    os.replace(tmp, job_file)
+    return jsonify({'ok': True})
+
+
 @app.route('/api/status/<job_id>')
 def job_status(job_id):
     job_file = os.path.join(JOBS_DIR, f'{job_id}.json')

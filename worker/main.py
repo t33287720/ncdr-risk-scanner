@@ -24,6 +24,8 @@ import requests
 from bs4 import BeautifulSoup
 import folium
 
+from retry_utils import failed_indexes, merge_retry
+
 _session = requests.Session()
 _session.headers.update({'User-Agent': 'ncdr-risk-scanner'})
 
@@ -291,6 +293,60 @@ def _write_job(job_file, job):
 
 # ── 工作處理 ─────────────────────────────────────────────
 
+def query_entry(entry, scenario):
+    """查詢單一地點；失敗時回傳標成「錯誤」的結果，不丟例外。"""
+    try:
+        if scenario == ALL_SCENARIOS:
+            risk = query_risk_all(entry['lat'], entry['lon'])
+        else:
+            risk = query_risk(entry['lat'], entry['lon'], scenario)
+        print(f"  {entry['name']} → 淹水:{risk['flood_risk']} 坡地H:{risk['land_hazard']}")
+        return {**entry, **risk}
+    except Exception as e:
+        print(f"  {entry['name']} 錯誤: {e}")
+        return {**entry, 'level': '錯誤', 'color': '#000000',
+                **{k: '錯誤' for k in RISK_FIELDS}}
+
+
+def _finalize_job(job, job_id, results, scenario):
+    """輸出 CSV／地圖／完整結果 JSON，並更新工作摘要。"""
+    save_results(results, os.path.join(RESULTS_DIR, job_id), scenario == ALL_SCENARIOS)
+    with open(os.path.join(RESULTS_DIR, job_id, 'results.json'), 'w', encoding='utf-8') as f:
+        json.dump(results, f, ensure_ascii=False)
+    job['status']   = 'done'
+    job['finished'] = now_tw()
+    job['count']    = len(results)
+    job['summary']  = {lvl: sum(1 for r in results if r.get('flood_risk') == lvl)
+                       for lvl in ['第五級', '第四級', '第三級', '第二級', '第一級', '無', '錯誤']}
+    job['results']  = [{**{k: r.get(k, '無') for k in ['name', 'lat', 'lon', *RISK_FIELDS]},
+                        'scenario': scenario}
+                       for r in results]
+
+
+def process_retry(job_file, job):
+    """只重查原結果中失敗的地點，其餘沿用，合併後重新輸出。"""
+    job_id   = job['id']
+    scenario = job.get('scenario', DEFAULT_SCENARIO)
+    try:
+        with open(os.path.join(RESULTS_DIR, job_id, 'results.json'), encoding='utf-8') as f:
+            results = json.load(f)
+        idx = failed_indexes(results)
+        print(f"[{job_id}] 重查 {len(idx)} 個失敗地點")
+        retried = {i: query_entry(results[i], scenario) for i in idx}
+        # 重查用原本的地點資料，避免殘留舊的錯誤欄位
+        retried = {i: {**r, 'name': results[i]['name'], 'lat': results[i]['lat'],
+                       'lon': results[i]['lon']} for i, r in retried.items()}
+        _finalize_job(job, job_id, merge_retry(results, retried), scenario)
+        job.pop('retry', None)
+    except Exception as e:
+        print(f"[{job_id}] 重查失敗: {e}")
+        job['status'] = 'error'
+        job['error']  = f'重查失敗：{e}'
+        job.pop('retry', None)
+    _write_job(job_file, job)
+    print(f"[{job_id}] 重查完成")
+
+
 def process_job(job_file):
     with open(job_file, encoding='utf-8') as f:
         job = json.load(f)
@@ -303,36 +359,17 @@ def process_job(job_file):
     job['started'] = now_tw()
     _write_job(job_file, job)
 
+    if job.get('retry'):
+        process_retry(job_file, job)
+        return
+
     try:
         entries = parse_kml(kml_path)  # 在 try 內，失敗會正確設為 error
         print(f"[{job_id}] {len(entries)} 個地點")
 
         scenario = job.get('scenario', DEFAULT_SCENARIO)
-        compare  = scenario == ALL_SCENARIOS
-        results = []
-        for entry in entries:
-            try:
-                if compare:
-                    risk = query_risk_all(entry['lat'], entry['lon'])
-                else:
-                    risk = query_risk(entry['lat'], entry['lon'], scenario)
-                print(f"  {entry['name']} → 淹水:{risk['flood_risk']} 坡地H:{risk['land_hazard']}")
-                results.append({**entry, **risk})
-            except Exception as e:
-                print(f"  {entry['name']} 錯誤: {e}")
-                results.append({**entry, 'level': '錯誤', 'color': '#000000',
-                                **{k: '錯誤' for k in RISK_FIELDS}})
-
-        save_results(results, os.path.join(RESULTS_DIR, job_id), compare)
-
-        job['status']   = 'done'
-        job['finished'] = now_tw()
-        job['count']    = len(results)
-        job['summary']  = {lvl: sum(1 for r in results if r.get('flood_risk') == lvl)
-                           for lvl in ['第五級', '第四級', '第三級', '第二級', '第一級', '無', '錯誤']}
-        job['results']  = [{**{k: r.get(k, '無') for k in ['name', 'lat', 'lon', *RISK_FIELDS]},
-                            'scenario': scenario}
-                           for r in results]
+        results = [query_entry(entry, scenario) for entry in entries]
+        _finalize_job(job, job_id, results, scenario)
 
     except Exception as e:
         print(f"[{job_id}] 失敗: {e}")

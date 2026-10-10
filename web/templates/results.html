@@ -31,6 +31,16 @@
 
   {% if job.status == 'done' %}
 
+    {% set failed = job.summary.get('錯誤', 0) if job.summary else 0 %}
+    {% if failed %}
+    <div class="card" style="border-color:var(--danger);">
+      <span class="card-title" style="color:var(--danger);">有 {{ failed }} 個地點查詢失敗</span>
+      <p style="font-size:.875rem; margin-bottom:10px;">可能是政府 WMS 服務暫時逾時，可只重查失敗的地點；若座標本身不在涵蓋範圍（例如海上或境外），重查仍會失敗。</p>
+      <button class="btn btn-secondary" id="retryBtn" onclick="retryFailed()">重新查詢失敗地點</button>
+      <span id="retryMsg" class="meta" style="margin-left:8px;"></span>
+    </div>
+    {% endif %}
+
     {% if job.summary %}
     <div class="card">
       <span class="card-title">淹水風險分佈（{{ scenario_label }} 情境）</span>
@@ -291,6 +301,23 @@ setTimeout(checkStatus, 4000);
   const clear = document.getElementById('filterClear');
   if (clear) clear.addEventListener('click', () => { if (active) applyFilter(active); });
 })();
+</script>
+<script>
+async function retryFailed() {
+  const btn = document.getElementById('retryBtn');
+  const msg = document.getElementById('retryMsg');
+  btn.disabled = true;
+  msg.textContent = '送出中...';
+  try {
+    const res  = await fetch(BASE + '/api/retry/{{ job.id }}', {method: 'POST'});
+    const data = await res.json();
+    if (data.ok) { location.reload(); return; }
+    msg.textContent = data.error || '重查失敗';
+  } catch (e) {
+    msg.textContent = '連線失敗，請稍後再試。';
+  }
+  btn.disabled = false;
+}
 </script>
 <script>
 async function runAiAnalysis() {

@@ -6,6 +6,7 @@ import time
 import csv as csv_mod
 import requests as _requests
 from datetime import datetime, timezone, timedelta
+from summary_utils import build_summary
 
 OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://host.docker.internal:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
@@ -168,8 +169,9 @@ def _scenario_label(job):
 def results(job_id):
     job, rows = _load_job_rows(job_id)
     compare, scenario_label = _scenario_label(job)
+    overview = build_summary(rows, compare) if job.get('status') == 'done' else None
     return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label,
-                           compare=compare)
+                           compare=compare, overview=overview)
 
 
 LEVEL_NAMES = {1: '第一級', 2: '第二級', 3: '第三級', 4: '第四級', 5: '第五級'}

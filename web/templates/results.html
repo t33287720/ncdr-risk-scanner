@@ -41,6 +41,40 @@
     </div>
     {% endif %}
 
+    {% if overview %}
+    <div class="card" id="overviewCard">
+      <span class="card-title">整體風險摘要（{{ scenario_label }} 情境）</span>
+      <div class="ov-kpis">
+        <div><div class="ov-num">{{ overview.total }}</div><div class="label">地點總數</div></div>
+        <div><div class="ov-num ov-high">{{ overview.high }}</div><div class="label">淹水風險 ≥ 第四級</div></div>
+        <div><div class="ov-num ov-high">{{ overview.high_pct }}%</div><div class="label">高風險占比（有資料者）</div></div>
+        {% if overview.upgrades is not none %}
+        <div><div class="ov-num ov-high">{{ overview.upgrades }}</div><div class="label">4°C 較 1.5°C 風險升級</div></div>
+        {% endif %}
+      </div>
+      <div class="ov-bars">
+        {% for lv, n in overview.counts.items() %}
+        <div class="ov-row"><span class="ov-lv">{{ lv }}</span>
+          <span class="ov-track"><span class="ov-fill lv{{ 5 - loop.index0 }}" style="width:{{ (n * 100 / overview.peak) | round(1) }}%"></span></span>
+          <span class="ov-n">{{ n }}</span></div>
+        {% endfor %}
+      </div>
+      {% if overview.top5 %}
+      <div class="ov-sub">最高風險前 5 名</div>
+      <ol class="ov-top">
+        {% for t in overview.top5 %}<li>{{ t.name }}　<span class="meta">最高 {{ t.top }}</span></li>{% endfor %}
+      </ol>
+      {% endif %}
+      {% if overview.counties %}
+      <details class="ov-sub"><summary>依縣市分組（依地點名稱中的縣市文字判斷，僅供參考）</summary>
+        <table class="risk-table"><thead><tr><th>縣市</th><th>地點數</th><th>淹水風險 ≥ 第四級</th></tr></thead>
+          <tbody>{% for c in overview.counties %}<tr><td>{{ c.county }}</td><td>{{ c.total }}</td><td>{{ c.high }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </details>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% if job.summary %}
     <div class="card">
       <span class="card-title">淹水風險分佈（{{ scenario_label }} 情境）</span>

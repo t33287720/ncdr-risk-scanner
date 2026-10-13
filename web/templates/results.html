@@ -55,7 +55,7 @@
       <div class="ov-bars">
         {% for lv, n in overview.counts.items() %}
         <div class="ov-row"><span class="ov-lv">{{ lv }}</span>
-          <span class="ov-track"><span class="ov-fill lv{{ 5 - loop.index0 }}" style="width:{{ (n * 100 / overview.peak) | round(1) }}%"></span></span>
+          <span class="ov-track" role="img" aria-label="{{ lv }} {{ n }} 個地點"><span class="ov-fill lv{{ 5 - loop.index0 }}" style="width:{{ (n * 100 / overview.peak) | round(1) }}%"></span></span>
           <span class="ov-n">{{ n }}</span></div>
         {% endfor %}
       </div>

@@ -39,6 +39,8 @@
       </div>
     </div>
 
+    <div id="kmlWarnings" class="card" style="display:none; border-left:4px solid var(--danger); margin-bottom:16px;" role="alert"></div>
+
     {% if kmls %}
     <table>
       <thead><tr><th>檔案名稱</th><th>大小</th><th>修改時間</th><th></th></tr></thead>
@@ -147,15 +149,31 @@ if (document.getElementById('dashMap') && allPoints.length) {
 
 // ── 上傳 KML ─────────────────────────────────────────────
 document.getElementById('uploadInput').addEventListener('change', async function() {
+  const box = document.getElementById('kmlWarnings');
+  let hasWarn = false;
+  box.innerHTML = '';
   for (const file of this.files) {
     const fd = new FormData();
     fd.append('file', file);
     const res = await fetch(BASE + '/api/upload', { method: 'POST', body: fd });
     const data = await res.json();
-    if (data.ok) { toast(`已上傳 ${data.name}`, 'success'); }
-    else          { toast(data.error, 'error'); }
+    if (!data.ok) { toast(data.error, 'error'); continue; }
+    toast(`已上傳 ${data.name}`, 'success');
+    if (data.warnings && data.warnings.length) {
+      hasWarn = true;
+      box.insertAdjacentHTML('beforeend',
+        `<p style="margin:0 0 6px"><b>${escHtml(data.name)}</b> 有 ${data.warnings.length} 筆座標異常（不影響上傳，可仍要分析）：</p><ul style="margin:0 0 8px 18px">` +
+        data.warnings.map(w => `<li>${escHtml(w.name)}：${escHtml(w.reason)}</li>`).join('') + '</ul>');
+    }
   }
-  if (this.files.length) setTimeout(() => location.reload(), 800);
+  if (hasWarn) {
+    box.insertAdjacentHTML('beforeend',
+      '<button class="btn btn-secondary btn-sm" onclick="location.reload()">知道了，仍要分析</button> ' +
+      '<span style="font-size:.8rem;color:var(--muted)">不要的檔案可在清單中按「刪除」。</span>');
+    box.style.display = '';
+  } else if (this.files.length) {
+    setTimeout(() => location.reload(), 800);
+  }
 });
 
 // 觸發分析

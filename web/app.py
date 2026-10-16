@@ -7,6 +7,7 @@ import csv as csv_mod
 import requests as _requests
 from datetime import datetime, timezone, timedelta
 from summary_utils import build_summary
+from kml_utils import kml_warnings
 
 OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://host.docker.internal:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
@@ -260,7 +261,7 @@ def upload_kml():
             return jsonify({'error': f'KML 包含 {count} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
     except Exception:
         pass  # 解析失敗讓 worker 處理
-    return jsonify({'ok': True, 'name': name})
+    return jsonify({'ok': True, 'name': name, 'warnings': kml_warnings(path)})
 
 
 @app.route('/api/delete-kml', methods=['POST'])

@@ -146,12 +146,19 @@ def about():
     return render_template('about.html')
 
 
-def _load_job_rows(job_id):
+def _read_job(job_id):
+    """讀取工作 JSON；找不到時回傳 None。"""
     job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
     if not os.path.exists(job_file):
-        abort(404)
+        return None
     with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
+        return json.load(f)
+
+
+def _load_job_rows(job_id):
+    job = _read_job(job_id)
+    if job is None:
+        abort(404)
     rows = []
     csv_path = os.path.join(RESULTS_DIR, job_id, 'results.csv')
     if os.path.exists(csv_path):
@@ -231,9 +238,7 @@ def results_csv(job_id):
     path = os.path.join(RESULTS_DIR, job_id, 'results.csv')
     if not os.path.exists(path):
         abort(404)
-    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
-    with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
+    job = _read_job(job_id) or {}
     return send_file(path, as_attachment=True,
                      download_name=f"{job.get('kml_name', job_id)}_results.csv")
 
@@ -312,11 +317,10 @@ def retry_failed(job_id):
 
 @app.route('/api/status/<job_id>')
 def job_status(job_id):
-    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
-    if not os.path.exists(job_file):
+    job = _read_job(job_id)
+    if job is None:
         return jsonify({'error': '找不到工作'}), 404
-    with open(job_file, encoding='utf-8') as f:
-        return jsonify(json.load(f))
+    return jsonify(job)
 
 
 @app.route('/api/save-points', methods=['POST'])
@@ -381,11 +385,9 @@ def save_point_kml():
 
 @app.route('/api/ai-analyze/<job_id>', methods=['POST'])
 def ai_analyze(job_id):
-    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
-    if not os.path.exists(job_file):
+    job = _read_job(job_id)
+    if job is None:
         return jsonify({'error': '找不到工作'}), 404
-    with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
     if job.get('status') != 'done' or not job.get('results'):
         return jsonify({'error': '分析尚未完成'}), 400
 

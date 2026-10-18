@@ -295,11 +295,11 @@ def analyze():
 @app.route('/api/retry/<job_id>', methods=['POST'])
 def retry_failed(job_id):
     """只重查失敗的地點：把已完成的工作改回 pending 並標記 retry，由 worker 處理。"""
-    job_file = os.path.join(JOBS_DIR, f'{secure_filename(job_id)}.json')
-    if not os.path.exists(job_file):
+    job_id = secure_filename(job_id)
+    job = _read_job(job_id)
+    if job is None:
         return jsonify({'error': '找不到工作'}), 404
-    with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
+    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
     if job.get('status') != 'done':
         return jsonify({'error': '分析尚未完成'}), 400
     if not any(r.get('flood_risk') == '錯誤' for r in job.get('results', [])):
@@ -391,8 +391,7 @@ def ai_analyze(job_id):
     if job.get('status') != 'done' or not job.get('results'):
         return jsonify({'error': '分析尚未完成'}), 400
 
-    scenario_labels = {'1.5C': '1.5°C', '2C': '2°C', '4C': '4°C'}
-    scenario = scenario_labels.get(job.get('scenario', '2C'), '2°C')
+    scenario = SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
     results  = job['results']
 
     purpose = (request.json or {}).get('purpose', '選址評估')

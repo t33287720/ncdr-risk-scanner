@@ -8,6 +8,7 @@ import requests as _requests
 from datetime import datetime, timezone, timedelta
 from summary_utils import build_summary
 from kml_utils import kml_warnings
+from job_utils import delete_job_files
 
 OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://host.docker.internal:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
@@ -275,6 +276,18 @@ def delete_kml():
     path = os.path.join(KML_DIR, name)
     if os.path.exists(path):
         os.remove(path)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/delete-job/<job_id>', methods=['POST'])
+def delete_job(job_id):
+    job_id = secure_filename(job_id)
+    job = _read_job(job_id) if job_id else None
+    if job is None:
+        return jsonify({'ok': False, 'error': '工作不存在'}), 404
+    ok, err = delete_job_files(job_id, JOBS_DIR, RESULTS_DIR, job.get('status'))
+    if not ok:
+        return jsonify({'ok': False, 'error': '分析仍在執行中，無法刪除'}), 409
     return jsonify({'ok': True})
 
 

@@ -86,6 +86,9 @@
             {% elif job.status in ['pending', 'running'] %}
             <button class="btn btn-secondary btn-sm" onclick="pollJob('{{ job.id }}')" id="poll-{{ job.id }}">重新整理</button>
             {% endif %}
+            {% if job.status not in ['pending', 'running'] %}
+            <button class="btn btn-danger btn-sm" onclick="deleteJob('{{ job.id }}', this)" style="margin-left:6px;">刪除</button>
+            {% endif %}
           </td>
         </tr>
         {% endif %}
@@ -193,6 +196,14 @@ async function deleteKml(name, btn) {
   if (!confirm(`確定刪除 ${name}？`)) return;
   const data = await api('/api/delete-kml', { name });
   if (data.ok) { btn.closest('tr').remove(); toast('已刪除', 'success'); }
+}
+
+// 刪除分析工作與結果檔
+async function deleteJob(jobId, btn) {
+  if (!confirm('確定刪除此分析工作與結果檔？此動作無法復原。')) return;
+  const data = await api('/api/delete-job/' + encodeURIComponent(jobId), {});
+  if (data.ok) { btn.closest('tr').remove(); toast('已刪除', 'success'); }
+  else toast(data.error || '刪除失敗', 'error');
 }
 
 // 輪詢工作狀態

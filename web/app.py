@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 from summary_utils import build_summary
 from kml_utils import kml_warnings
 from job_utils import delete_job_files
+from csv_utils import csv_to_points, points_to_kml
 
 OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://host.docker.internal:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
@@ -254,10 +255,23 @@ def upload_kml():
         return jsonify({'error': '沒有上傳檔案'}), 400
     f = request.files['file']
     name = secure_filename(f.filename)
-    if not name.lower().endswith('.kml'):
-        return jsonify({'error': '只接受 .kml 檔案'}), 400
-    path = os.path.join(KML_DIR, name)
-    f.save(path)
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in ('.kml', '.csv'):
+        return jsonify({'error': '只接受 .kml 或 .csv 檔案'}), 400
+    if ext == '.csv':
+        try:
+            points = csv_to_points(f.read())
+        except ValueError as e:
+            return jsonify({'error': f'{name}：{e}'}), 400
+        if len(points) > KML_MAX_POINTS:
+            return jsonify({'error': f'CSV 包含 {len(points)} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
+        name = os.path.splitext(name)[0] + '.kml'
+        path = os.path.join(KML_DIR, name)
+        with open(path, 'w', encoding='utf-8') as out:
+            out.write(points_to_kml(points))
+    else:
+        path = os.path.join(KML_DIR, name)
+        f.save(path)
     # 檢查地點數量
     import xml.etree.ElementTree as ET
     try:

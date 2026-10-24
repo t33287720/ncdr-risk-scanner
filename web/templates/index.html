@@ -33,12 +33,13 @@
         </select>
         <a class="btn btn-secondary btn-sm" href="{{ url_for('map_query') }}">+ 地圖新增</a>
         <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-          ↑ 上傳 KML
-          <input type="file" accept=".kml" id="uploadInput" style="display:none" multiple>
+          ↑ 上傳 KML／CSV
+          <input type="file" accept=".kml,.csv" id="uploadInput" style="display:none" multiple>
         </label>
       </div>
     </div>
 
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 8px">也可上傳 CSV（UTF-8 或 Big5），欄位為「名稱,緯度,經度」，會自動轉成 KML。<a href="data:text/csv;charset=utf-8,%EF%BB%BF%E5%90%8D%E7%A8%B1,%E7%B7%AF%E5%BA%A6,%E7%B6%93%E5%BA%A6%0A%E5%8F%B0%E5%8C%97101,25.0340,121.5645%0A" download="locations_example.csv">下載範例</a></p>
     <div id="kmlWarnings" class="card" style="display:none; border-left:4px solid var(--danger); margin-bottom:16px;" role="alert"></div>
 
     {% if kmls %}

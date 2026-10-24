@@ -6,6 +6,10 @@ import time
 import csv as csv_mod
 import requests as _requests
 from datetime import datetime, timezone, timedelta
+from summary_utils import build_summary
+from kml_utils import kml_warnings
+from job_utils import delete_job_files
+from csv_utils import csv_to_points, points_to_kml
 
 OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://host.docker.internal:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
@@ -144,12 +148,19 @@ def about():
     return render_template('about.html')
 
 
-def _load_job_rows(job_id):
+def _read_job(job_id):
+    """讀取工作 JSON；找不到時回傳 None。"""
     job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
     if not os.path.exists(job_file):
-        abort(404)
+        return None
     with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
+        return json.load(f)
+
+
+def _load_job_rows(job_id):
+    job = _read_job(job_id)
+    if job is None:
+        abort(404)
     rows = []
     csv_path = os.path.join(RESULTS_DIR, job_id, 'results.csv')
     if os.path.exists(csv_path):
@@ -168,8 +179,9 @@ def _scenario_label(job):
 def results(job_id):
     job, rows = _load_job_rows(job_id)
     compare, scenario_label = _scenario_label(job)
+    overview = build_summary(rows, compare) if job.get('status') == 'done' else None
     return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label,
-                           compare=compare)
+                           compare=compare, overview=overview)
 
 
 LEVEL_NAMES = {1: '第一級', 2: '第二級', 3: '第三級', 4: '第四級', 5: '第五級'}
@@ -228,9 +240,7 @@ def results_csv(job_id):
     path = os.path.join(RESULTS_DIR, job_id, 'results.csv')
     if not os.path.exists(path):
         abort(404)
-    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
-    with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
+    job = _read_job(job_id) or {}
     return send_file(path, as_attachment=True,
                      download_name=f"{job.get('kml_name', job_id)}_results.csv")
 
@@ -245,10 +255,23 @@ def upload_kml():
         return jsonify({'error': '沒有上傳檔案'}), 400
     f = request.files['file']
     name = secure_filename(f.filename)
-    if not name.lower().endswith('.kml'):
-        return jsonify({'error': '只接受 .kml 檔案'}), 400
-    path = os.path.join(KML_DIR, name)
-    f.save(path)
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in ('.kml', '.csv'):
+        return jsonify({'error': '只接受 .kml 或 .csv 檔案'}), 400
+    if ext == '.csv':
+        try:
+            points = csv_to_points(f.read())
+        except ValueError as e:
+            return jsonify({'error': f'{name}：{e}'}), 400
+        if len(points) > KML_MAX_POINTS:
+            return jsonify({'error': f'CSV 包含 {len(points)} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
+        name = os.path.splitext(name)[0] + '.kml'
+        path = os.path.join(KML_DIR, name)
+        with open(path, 'w', encoding='utf-8') as out:
+            out.write(points_to_kml(points))
+    else:
+        path = os.path.join(KML_DIR, name)
+        f.save(path)
     # 檢查地點數量
     import xml.etree.ElementTree as ET
     try:
@@ -258,7 +281,7 @@ def upload_kml():
             return jsonify({'error': f'KML 包含 {count} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
     except Exception:
         pass  # 解析失敗讓 worker 處理
-    return jsonify({'ok': True, 'name': name})
+    return jsonify({'ok': True, 'name': name, 'warnings': kml_warnings(path)})
 
 
 @app.route('/api/delete-kml', methods=['POST'])
@@ -267,6 +290,18 @@ def delete_kml():
     path = os.path.join(KML_DIR, name)
     if os.path.exists(path):
         os.remove(path)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/delete-job/<job_id>', methods=['POST'])
+def delete_job(job_id):
+    job_id = secure_filename(job_id)
+    job = _read_job(job_id) if job_id else None
+    if job is None:
+        return jsonify({'ok': False, 'error': '工作不存在'}), 404
+    ok, err = delete_job_files(job_id, JOBS_DIR, RESULTS_DIR, job.get('status'))
+    if not ok:
+        return jsonify({'ok': False, 'error': '分析仍在執行中，無法刪除'}), 409
     return jsonify({'ok': True})
 
 
@@ -287,11 +322,11 @@ def analyze():
 @app.route('/api/retry/<job_id>', methods=['POST'])
 def retry_failed(job_id):
     """只重查失敗的地點：把已完成的工作改回 pending 並標記 retry，由 worker 處理。"""
-    job_file = os.path.join(JOBS_DIR, f'{secure_filename(job_id)}.json')
-    if not os.path.exists(job_file):
+    job_id = secure_filename(job_id)
+    job = _read_job(job_id)
+    if job is None:
         return jsonify({'error': '找不到工作'}), 404
-    with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
+    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
     if job.get('status') != 'done':
         return jsonify({'error': '分析尚未完成'}), 400
     if not any(r.get('flood_risk') == '錯誤' for r in job.get('results', [])):
@@ -309,11 +344,10 @@ def retry_failed(job_id):
 
 @app.route('/api/status/<job_id>')
 def job_status(job_id):
-    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
-    if not os.path.exists(job_file):
+    job = _read_job(job_id)
+    if job is None:
         return jsonify({'error': '找不到工作'}), 404
-    with open(job_file, encoding='utf-8') as f:
-        return jsonify(json.load(f))
+    return jsonify(job)
 
 
 @app.route('/api/save-points', methods=['POST'])
@@ -378,16 +412,13 @@ def save_point_kml():
 
 @app.route('/api/ai-analyze/<job_id>', methods=['POST'])
 def ai_analyze(job_id):
-    job_file = os.path.join(JOBS_DIR, f'{job_id}.json')
-    if not os.path.exists(job_file):
+    job = _read_job(job_id)
+    if job is None:
         return jsonify({'error': '找不到工作'}), 404
-    with open(job_file, encoding='utf-8') as f:
-        job = json.load(f)
     if job.get('status') != 'done' or not job.get('results'):
         return jsonify({'error': '分析尚未完成'}), 400
 
-    scenario_labels = {'1.5C': '1.5°C', '2C': '2°C', '4C': '4°C'}
-    scenario = scenario_labels.get(job.get('scenario', '2C'), '2°C')
+    scenario = SCENARIO_LABELS.get(job.get('scenario', '2C'), '2°C')
     results  = job['results']
 
     purpose = (request.json or {}).get('purpose', '選址評估')

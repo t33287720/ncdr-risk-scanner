@@ -7,6 +7,7 @@ import csv as csv_mod
 import requests as _requests
 from datetime import datetime, timezone, timedelta
 from summary_utils import build_summary
+from compare_utils import diff_jobs
 from kml_utils import kml_warnings
 from job_utils import delete_job_files
 from csv_utils import csv_to_points, points_to_kml
@@ -180,8 +181,22 @@ def results(job_id):
     job, rows = _load_job_rows(job_id)
     compare, scenario_label = _scenario_label(job)
     overview = build_summary(rows, compare) if job.get('status') == 'done' else None
+    history, diff, base_job = [], None, None
+    if job.get('status') == 'done':
+        # 同一份 KML、同情境、較早完成的分析可供比較
+        history = [j for j in _load_jobs(200)
+                   if j.get('id') != job_id and j.get('status') == 'done'
+                   and j.get('kml_name') == job.get('kml_name')
+                   and j.get('scenario') == job.get('scenario')
+                   and j.get('created', '') < job.get('created', '')]
+        want = request.args.get('compare', '')
+        base_job = next((j for j in history if j.get('id') == want), None)
+        if base_job:
+            _, old_rows = _load_job_rows(base_job['id'])
+            diff = diff_jobs(old_rows, rows)
     return render_template('results.html', job=job, rows=rows, scenario_label=scenario_label,
-                           compare=compare, overview=overview)
+                           compare=compare, overview=overview, history=history,
+                           diff=diff, base_job=base_job)
 
 
 LEVEL_NAMES = {1: '第一級', 2: '第二級', 3: '第三級', 4: '第四級', 5: '第五級'}

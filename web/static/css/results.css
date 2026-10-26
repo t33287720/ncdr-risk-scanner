@@ -152,3 +152,7 @@
 .ov-n { width:2.5em; text-align:right; }
 .ov-sub { margin-top:14px; font-size:.875rem; }
 .ov-top { margin:6px 0 0 1.4em; font-size:.875rem; }
+
+/* 與較早分析比較 */
+.trend-new { color: #1565c0; }
+.cmp-hide { display: none !important; }

@@ -137,3 +137,22 @@
 .trend-up   { color: #CA3B00; }
 .trend-down { color: #2e7d32; }
 .trend-flat, .trend-na { color: var(--muted); }
+
+/* 整體風險摘要 */
+.ov-kpis { display:flex; flex-wrap:wrap; gap:24px; margin-bottom:14px; }
+.ov-num { font-size:1.6rem; font-weight:700; }
+.ov-high { color:var(--danger); }
+.ov-row { display:flex; align-items:center; gap:8px; margin:3px 0; font-size:.85rem; }
+.ov-lv { width:3.5em; }
+.ov-track { flex:1; background:#eee; border-radius:4px; height:12px; overflow:hidden; }
+.ov-fill { display:block; height:100%; background:var(--danger); }
+.ov-fill.lv1, .ov-fill.lv2 { background:#8bc34a; }
+.ov-fill.lv3 { background:#ffc107; }
+.ov-fill.lv4 { background:#ff7043; }
+.ov-n { width:2.5em; text-align:right; }
+.ov-sub { margin-top:14px; font-size:.875rem; }
+.ov-top { margin:6px 0 0 1.4em; font-size:.875rem; }
+
+/* 與較早分析比較 */
+.trend-new { color: #1565c0; }
+.cmp-hide { display: none !important; }

@@ -15,6 +15,7 @@
       <div class="meta">
         建立：{{ job.created }}
         {% if job.finished %} &nbsp;·&nbsp; 完成：{{ job.finished }}{% endif %}
+        {% if job.cache_hits %} &nbsp;·&nbsp; {{ job.cache_hits }} 次查詢使用快取{% endif %}
         {% if job.count is defined %} &nbsp;·&nbsp; {{ job.count }} 個地點{% endif %}
       </div>
     </div>

@@ -4,6 +4,7 @@ import uuid
 import glob
 import time
 import csv as csv_mod
+import xml.etree.ElementTree as ET
 import requests as _requests
 from datetime import datetime, timezone, timedelta
 from summary_utils import build_summary
@@ -288,7 +289,6 @@ def upload_kml():
         path = os.path.join(KML_DIR, name)
         f.save(path)
     # 檢查地點數量
-    import xml.etree.ElementTree as ET
     try:
         count = len(ET.parse(path).findall('.//{http://www.opengis.net/kml/2.2}Point'))
         if count > KML_MAX_POINTS:

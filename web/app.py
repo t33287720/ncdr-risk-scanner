@@ -81,19 +81,9 @@ def _load_jobs(limit=50):
 
 
 def _points_to_kml(points):
-    lines = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>',
-    ]
-    for p in points:
-        name = str(p.get('name', '未命名')).replace('&', '&amp;').replace('<', '&lt;')
-        lines.append(
-            f'  <Placemark><name>{name}</name>'
-            f'<Point><coordinates>{p["lon"]},{p["lat"]},0</coordinates></Point>'
-            f'</Placemark>'
-        )
-    lines.append('</Document></kml>')
-    return '\n'.join(lines)
+    """[{'name','lat','lon'}] → KML；轉換邏輯共用 csv_utils.points_to_kml。"""
+    return points_to_kml(
+        [(str(p.get('name', '未命名')), p['lon'], p['lat']) for p in points])
 
 
 VALID_SCENARIOS = {'1.5C', '2C', '4C', 'all'}   # all = 三情境對比

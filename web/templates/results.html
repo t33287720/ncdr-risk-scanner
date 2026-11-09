@@ -15,6 +15,7 @@
       <div class="meta">
         建立：{{ job.created }}
         {% if job.finished %} &nbsp;·&nbsp; 完成：{{ job.finished }}{% endif %}
+        {% if job.cache_hits %} &nbsp;·&nbsp; {{ job.cache_hits }} 次查詢使用快取{% endif %}
         {% if job.count is defined %} &nbsp;·&nbsp; {{ job.count }} 個地點{% endif %}
       </div>
     </div>
@@ -38,6 +39,60 @@
       <p style="font-size:.875rem; margin-bottom:10px;">可能是政府 WMS 服務暫時逾時，可只重查失敗的地點；若座標本身不在涵蓋範圍（例如海上或境外），重查仍會失敗。</p>
       <button class="btn btn-secondary" id="retryBtn" onclick="retryFailed()">重新查詢失敗地點</button>
       <span id="retryMsg" class="meta" style="margin-left:8px;"></span>
+    </div>
+    {% endif %}
+
+    {% if history %}
+    <div class="card" id="diffCard">
+      <span class="card-title">與較早的分析比較</span>
+      <form method="get" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <select name="compare" aria-label="選擇要比較的較早分析">
+          <option value="">— 選擇較早的分析 —</option>
+          {% for h in history %}<option value="{{ h.id }}"{% if base_job and base_job.id == h.id %} selected{% endif %}>{{ h.created[:10] }}（{{ h.id }}）</option>{% endfor %}
+        </select>
+        <button class="btn btn-secondary" type="submit">比較</button>
+        {% if diff %}<a class="btn btn-secondary" href="{{ url_for('results', job_id=job.id) }}">取消比較</a>{% endif %}
+      </form>
+      {% if diff %}
+      <p style="margin-top:10px;">與 {{ base_job.created[:10] }} 相比：<strong class="trend trend-up">{{ diff.counts.up }} 處升級</strong>、<strong class="trend trend-down">{{ diff.counts.down }} 處降級</strong>、{{ diff.counts.same }} 處持平、{{ diff.counts.new }} 處新增、{{ diff.counts.removed }} 處移除。</p>
+      {% if diff.removed %}<div class="meta">已移除：{{ diff.removed | join('、') }}</div>{% endif %}
+      <label style="display:block; margin-top:6px; font-size:.875rem;"><input type="checkbox" id="onlyChanged"> 只看有變動的地點（升級／降級／新增）</label>
+      <div class="meta" style="margin-top:4px;">依地點名稱＋座標配對；風險等級以七個維度的等級差總和判斷。KML 修改過的地點會被視為新增／移除。</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if overview %}
+    <div class="card" id="overviewCard">
+      <span class="card-title">整體風險摘要（{{ scenario_label }} 情境）</span>
+      <div class="ov-kpis">
+        <div><div class="ov-num">{{ overview.total }}</div><div class="label">地點總數</div></div>
+        <div><div class="ov-num ov-high">{{ overview.high }}</div><div class="label">淹水風險 ≥ 第四級</div></div>
+        <div><div class="ov-num ov-high">{{ overview.high_pct }}%</div><div class="label">高風險占比（有資料者）</div></div>
+        {% if overview.upgrades is not none %}
+        <div><div class="ov-num ov-high">{{ overview.upgrades }}</div><div class="label">4°C 較 1.5°C 風險升級</div></div>
+        {% endif %}
+      </div>
+      <div class="ov-bars">
+        {% for lv, n in overview.counts.items() %}
+        <div class="ov-row"><span class="ov-lv">{{ lv }}</span>
+          <span class="ov-track" role="img" aria-label="{{ lv }} {{ n }} 個地點"><span class="ov-fill lv{{ 5 - loop.index0 }}" style="width:{{ (n * 100 / overview.peak) | round(1) }}%"></span></span>
+          <span class="ov-n">{{ n }}</span></div>
+        {% endfor %}
+      </div>
+      {% if overview.top5 %}
+      <div class="ov-sub">最高風險前 5 名</div>
+      <ol class="ov-top">
+        {% for t in overview.top5 %}<li>{{ t.name }}　<span class="meta">最高 {{ t.top }}</span></li>{% endfor %}
+      </ol>
+      {% endif %}
+      {% if overview.counties %}
+      <details class="ov-sub"><summary>依縣市分組（依地點名稱中的縣市文字判斷，僅供參考）</summary>
+        <table class="risk-table"><thead><tr><th>縣市</th><th>地點數</th><th>淹水風險 ≥ 第四級</th></tr></thead>
+          <tbody>{% for c in overview.counties %}<tr><td>{{ c.county }}</td><td>{{ c.total }}</td><td>{{ c.high }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </details>
+      {% endif %}
     </div>
     {% endif %}
 
@@ -130,8 +185,9 @@
         </thead>
         <tbody>
           {% for r in rows %}
-          <tr>
-            <td class="name-cell">{{ r.get('地點名稱', '—') }}</td>
+          {% set ch = diff.changes.get(loop.index0) if diff else None %}
+          <tr{% if ch %} data-change="{{ ch }}"{% endif %}>
+            <td class="name-cell">{{ r.get('地點名稱', '—') }}{% if ch %} <span class="trend trend-{{ ch }}">{{ {'up':'▲ 升級','down':'▼ 降級','new':'＋ 新增'}.get(ch, '－') }}</span>{% endif %}</td>
             <td class="max-cell"></td>
             <td>{{ r.get('淹水風險',       r.get('風險等級','—')) | risk_badge }}</td>
             <td>{{ r.get('淹水危害度',     '—') | risk_badge }}</td>
@@ -272,6 +328,11 @@ setTimeout(checkStatus, 4000);
     };
     th.addEventListener('click', toggle);
     th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  });
+
+  const onlyChanged = document.getElementById('onlyChanged');
+  if (onlyChanged) onlyChanged.addEventListener('change', () => {
+    rows.forEach(tr => tr.classList.toggle('cmp-hide', onlyChanged.checked && (tr.dataset.change || 'same') === 'same'));
   });
 
   // 篩選：點擊統計卡片，以「最高風險等級」過濾

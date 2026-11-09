@@ -25,6 +25,7 @@ from bs4 import BeautifulSoup
 import folium
 
 from retry_utils import failed_indexes, merge_retry
+from cache_utils import WmsCache
 
 _session = requests.Session()
 _session.headers.update({'User-Agent': 'ncdr-risk-scanner'})
@@ -57,6 +58,13 @@ RISK_LEVELS = {1: '第一級', 2: '第二級', 3: '第三級', 4: '第四級', 5
 
 for d in [JOBS_DIR, RESULTS_DIR, KML_DIR]:
     os.makedirs(d, exist_ok=True)
+
+# 座標＋情境的查詢結果快取；WMS_CACHE_DAYS=0 即停用
+try:
+    _cache_days = float(os.environ.get('WMS_CACHE_DAYS', '7'))
+except ValueError:
+    _cache_days = 7
+_cache = WmsCache(os.path.join(DATA_DIR, 'cache', 'wms-cache.json'), days=_cache_days)
 
 _seed = '/app/test.kml'
 if os.path.exists(_seed) and not os.path.exists(os.path.join(KML_DIR, 'test.kml')):
@@ -143,6 +151,17 @@ def _parse_level(val):
 # ── 風險查詢 ─────────────────────────────────────────────
 
 def query_risk(lat, lon, scenario=DEFAULT_SCENARIO):
+    """先查快取；只有成功解析出等級的結果才寫入快取。"""
+    cached = _cache.get(lat, lon, scenario)
+    if cached is not None:
+        return cached
+    result = _query_risk_uncached(lat, lon, scenario)
+    if result['flood_risk'] != '無':
+        _cache.put(lat, lon, scenario, result)
+    return result
+
+
+def _query_risk_uncached(lat, lon, scenario):
     layer = SCENARIO_LAYERS.get(scenario, SCENARIO_LAYERS[DEFAULT_SCENARIO])
     flood = _wms_query(FLOOD_WMS_URL, lat, lon, layer)
     land  = _wms_query(LAND_WMS_URL,  lat, lon, layer)
@@ -368,7 +387,9 @@ def process_job(job_file):
         print(f"[{job_id}] {len(entries)} 個地點")
 
         scenario = job.get('scenario', DEFAULT_SCENARIO)
+        _cache.hits = 0
         results = [query_entry(entry, scenario) for entry in entries]
+        job['cache_hits'] = _cache.hits
         _finalize_job(job, job_id, results, scenario)
 
     except Exception as e:

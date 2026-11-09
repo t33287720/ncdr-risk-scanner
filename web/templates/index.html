@@ -33,11 +33,14 @@
         </select>
         <a class="btn btn-secondary btn-sm" href="{{ url_for('map_query') }}">+ 地圖新增</a>
         <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-          ↑ 上傳 KML
-          <input type="file" accept=".kml" id="uploadInput" style="display:none" multiple>
+          ↑ 上傳 KML／CSV
+          <input type="file" accept=".kml,.csv" id="uploadInput" style="display:none" multiple>
         </label>
       </div>
     </div>
+
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 8px">也可上傳 CSV（UTF-8 或 Big5），欄位為「名稱,緯度,經度」，會自動轉成 KML。<a href="data:text/csv;charset=utf-8,%EF%BB%BF%E5%90%8D%E7%A8%B1,%E7%B7%AF%E5%BA%A6,%E7%B6%93%E5%BA%A6%0A%E5%8F%B0%E5%8C%97101,25.0340,121.5645%0A" download="locations_example.csv">下載範例</a></p>
+    <div id="kmlWarnings" class="card" style="display:none; border-left:4px solid var(--danger); margin-bottom:16px;" role="alert"></div>
 
     {% if kmls %}
     <table>
@@ -83,6 +86,9 @@
             <a class="btn btn-secondary btn-sm" href="{{ url_for('results', job_id=job.id) }}">查看結果</a>
             {% elif job.status in ['pending', 'running'] %}
             <button class="btn btn-secondary btn-sm" onclick="pollJob('{{ job.id }}')" id="poll-{{ job.id }}">重新整理</button>
+            {% endif %}
+            {% if job.status not in ['pending', 'running'] %}
+            <button class="btn btn-danger btn-sm" onclick="deleteJob('{{ job.id }}', this)" style="margin-left:6px;">刪除</button>
             {% endif %}
           </td>
         </tr>
@@ -147,15 +153,31 @@ if (document.getElementById('dashMap') && allPoints.length) {
 
 // ── 上傳 KML ─────────────────────────────────────────────
 document.getElementById('uploadInput').addEventListener('change', async function() {
+  const box = document.getElementById('kmlWarnings');
+  let hasWarn = false;
+  box.innerHTML = '';
   for (const file of this.files) {
     const fd = new FormData();
     fd.append('file', file);
     const res = await fetch(BASE + '/api/upload', { method: 'POST', body: fd });
     const data = await res.json();
-    if (data.ok) { toast(`已上傳 ${data.name}`, 'success'); }
-    else          { toast(data.error, 'error'); }
+    if (!data.ok) { toast(data.error, 'error'); continue; }
+    toast(`已上傳 ${data.name}`, 'success');
+    if (data.warnings && data.warnings.length) {
+      hasWarn = true;
+      box.insertAdjacentHTML('beforeend',
+        `<p style="margin:0 0 6px"><b>${escHtml(data.name)}</b> 有 ${data.warnings.length} 筆座標異常（不影響上傳，可仍要分析）：</p><ul style="margin:0 0 8px 18px">` +
+        data.warnings.map(w => `<li>${escHtml(w.name)}：${escHtml(w.reason)}</li>`).join('') + '</ul>');
+    }
   }
-  if (this.files.length) setTimeout(() => location.reload(), 800);
+  if (hasWarn) {
+    box.insertAdjacentHTML('beforeend',
+      '<button class="btn btn-secondary btn-sm" onclick="location.reload()">知道了，仍要分析</button> ' +
+      '<span style="font-size:.8rem;color:var(--muted)">不要的檔案可在清單中按「刪除」。</span>');
+    box.style.display = '';
+  } else if (this.files.length) {
+    setTimeout(() => location.reload(), 800);
+  }
 });
 
 // 觸發分析
@@ -175,6 +197,14 @@ async function deleteKml(name, btn) {
   if (!confirm(`確定刪除 ${name}？`)) return;
   const data = await api('/api/delete-kml', { name });
   if (data.ok) { btn.closest('tr').remove(); toast('已刪除', 'success'); }
+}
+
+// 刪除分析工作與結果檔
+async function deleteJob(jobId, btn) {
+  if (!confirm('確定刪除此分析工作與結果檔？此動作無法復原。')) return;
+  const data = await api('/api/delete-job/' + encodeURIComponent(jobId), {});
+  if (data.ok) { btn.closest('tr').remove(); toast('已刪除', 'success'); }
+  else toast(data.error || '刪除失敗', 'error');
 }
 
 // 輪詢工作狀態

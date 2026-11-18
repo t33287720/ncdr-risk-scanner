@@ -11,7 +11,8 @@ from summary_utils import build_summary
 from compare_utils import diff_jobs
 from kml_utils import kml_warnings
 from job_utils import delete_job_files
-from csv_utils import csv_to_points, points_to_kml
+from csv_utils import parse_csv, points_to_kml
+from geocode_utils import geocode_rows
 
 OLLAMA_URL   = os.environ.get('OLLAMA_URL', 'http://host.docker.internal:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1:8b')
@@ -264,13 +265,28 @@ def upload_kml():
     ext = os.path.splitext(name)[1].lower()
     if ext not in ('.kml', '.csv'):
         return jsonify({'error': '只接受 .kml 或 .csv 檔案'}), 400
+    failed = []
+    converted = 0
     if ext == '.csv':
         try:
-            points = csv_to_points(f.read())
+            points, pending = parse_csv(f.read())
         except ValueError as e:
             return jsonify({'error': f'{name}：{e}'}), 400
-        if len(points) > KML_MAX_POINTS:
-            return jsonify({'error': f'CSV 包含 {len(points)} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
+        if len(points) + len(pending) > KML_MAX_POINTS:
+            return jsonify({'error': f'CSV 包含 {len(points) + len(pending)} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
+        if pending:
+            def _http_get(url, params):
+                r = _requests.get(url, params=params, timeout=10,
+                                  headers={'User-Agent': 'ncdr-risk-scanner/1.0'})
+                r.raise_for_status()
+                return r.json()
+            geo_points, failed = geocode_rows(
+                pending, _http_get, os.path.join(DATA_DIR, 'cache', 'geocode-cache.json'))
+            converted = len(geo_points)
+            points = points + geo_points
+            if not points:
+                return jsonify({'error': f'{name}：所有地址都轉換失敗',
+                                'failed': [{'name': n, 'address': a} for n, a in failed]}), 400
         name = os.path.splitext(name)[0] + '.kml'
         path = os.path.join(KML_DIR, name)
         with open(path, 'w', encoding='utf-8') as out:
@@ -286,7 +302,9 @@ def upload_kml():
             return jsonify({'error': f'KML 包含 {count} 個地點，上限為 {KML_MAX_POINTS} 個'}), 400
     except Exception:
         pass  # 解析失敗讓 worker 處理
-    return jsonify({'ok': True, 'name': name, 'warnings': kml_warnings(path)})
+    return jsonify({'ok': True, 'name': name, 'warnings': kml_warnings(path),
+                    'converted': converted,
+                    'failed': [{'name': n, 'address': a} for n, a in failed]})
 
 
 @app.route('/api/delete-kml', methods=['POST'])

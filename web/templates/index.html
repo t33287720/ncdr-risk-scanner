@@ -39,7 +39,7 @@
       </div>
     </div>
 
-    <p style="font-size:.8rem;color:var(--muted);margin:0 0 8px">也可上傳 CSV（UTF-8 或 Big5），欄位為「名稱,緯度,經度」，會自動轉成 KML。<a href="data:text/csv;charset=utf-8,%EF%BB%BF%E5%90%8D%E7%A8%B1,%E7%B7%AF%E5%BA%A6,%E7%B6%93%E5%BA%A6%0A%E5%8F%B0%E5%8C%97101,25.0340,121.5645%0A" download="locations_example.csv">下載範例</a></p>
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 8px">也可上傳 CSV（UTF-8 或 Big5），欄位為「名稱,緯度,經度」，或只填「名稱,地址」（自動轉成座標，每筆約 1 秒，轉換結果請自行抽查），會自動轉成 KML。<a href="data:text/csv;charset=utf-8,%EF%BB%BF%E5%90%8D%E7%A8%B1,%E7%B7%AF%E5%BA%A6,%E7%B6%93%E5%BA%A6%0A%E5%8F%B0%E5%8C%97101,25.0340,121.5645%0A" download="locations_example.csv">下載範例</a></p>
     <div id="kmlWarnings" class="card" style="display:none; border-left:4px solid var(--danger); margin-bottom:16px;" role="alert"></div>
 
     {% if kmls %}
@@ -152,6 +152,17 @@ if (document.getElementById('dashMap') && allPoints.length) {
 }
 
 // ── 上傳 KML ─────────────────────────────────────────────
+function showFailed(box, fileName, converted, failed) {
+  box.insertAdjacentHTML('beforeend',
+    `<p style="margin:0 0 6px"><b>${escHtml(fileName)}</b>：${converted} 筆地址轉換成功、${failed.length} 筆找不到（未納入分析，修正後可重傳）：</p><ul style="margin:0 0 8px 18px">` +
+    failed.map(w => `<li>${escHtml(w.name)}：${escHtml(w.address)}</li>`).join('') + '</ul>' +
+    '<a class="btn btn-secondary btn-sm" download="failed_addresses.csv" href="data:text/csv;charset=utf-8,' +
+    encodeURIComponent('\uFEFF名稱,地址\n' + failed.map(w => csvCell(w.name) + ',' + csvCell(w.address)).join('\n') + '\n') +
+    '">下載失敗清單</a>');
+  box.style.display = '';
+}
+function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
+
 document.getElementById('uploadInput').addEventListener('change', async function() {
   const box = document.getElementById('kmlWarnings');
   let hasWarn = false;
@@ -161,8 +172,16 @@ document.getElementById('uploadInput').addEventListener('change', async function
     fd.append('file', file);
     const res = await fetch(BASE + '/api/upload', { method: 'POST', body: fd });
     const data = await res.json();
-    if (!data.ok) { toast(data.error, 'error'); continue; }
+    if (!data.ok) {
+      toast(data.error, 'error');
+      if (data.failed && data.failed.length) { hasWarn = true; showFailed(box, file.name, 0, data.failed); }
+      continue;
+    }
     toast(`已上傳 ${data.name}`, 'success');
+    if (data.failed && data.failed.length) {
+      hasWarn = true;
+      showFailed(box, data.name, data.converted, data.failed);
+    }
     if (data.warnings && data.warnings.length) {
       hasWarn = true;
       box.insertAdjacentHTML('beforeend',

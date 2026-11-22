@@ -167,11 +167,22 @@ document.getElementById('uploadInput').addEventListener('change', async function
   const box = document.getElementById('kmlWarnings');
   let hasWarn = false;
   box.innerHTML = '';
+  const label = this.closest('label');
+  const labelText = label.firstChild;
+  const origText = labelText.textContent;
+  label.style.pointerEvents = 'none';
+  label.style.opacity = '.6';
   for (const file of this.files) {
+    labelText.textContent = `\n          上傳中：${file.name}…\n          `;
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(BASE + '/api/upload', { method: 'POST', body: fd });
-    const data = await res.json();
+    let data;
+    try {
+      const res = await fetch(BASE + '/api/upload', { method: 'POST', body: fd });
+      data = await res.json();
+    } catch (e) {
+      data = { ok: false, error: `上傳 ${file.name} 失敗，請檢查網路後重試` };
+    }
     if (!data.ok) {
       toast(data.error, 'error');
       if (data.failed && data.failed.length) { hasWarn = true; showFailed(box, file.name, 0, data.failed); }
@@ -189,6 +200,10 @@ document.getElementById('uploadInput').addEventListener('change', async function
         data.warnings.map(w => `<li>${escHtml(w.name)}：${escHtml(w.reason)}</li>`).join('') + '</ul>');
     }
   }
+  labelText.textContent = origText;
+  label.style.pointerEvents = '';
+  label.style.opacity = '';
+  this.value = '';
   if (hasWarn) {
     box.insertAdjacentHTML('beforeend',
       '<button class="btn btn-secondary btn-sm" onclick="location.reload()">知道了，仍要分析</button> ' +

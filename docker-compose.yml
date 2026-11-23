@@ -6,6 +6,7 @@ services:
     environment:
       - DATA_DIR=/data
       - PYTHONUNBUFFERED=1
+      - WMS_CACHE_DAYS=${WMS_CACHE_DAYS:-7}
     volumes:
       - /var/opt/ncdr-risk-scanner:/data
       - ./worker:/app
